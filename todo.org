@@ -1,9 +1,12 @@
 * TODO Multiple cache backends (Redis, fs)
-* TODO Enable toggling of in-cache and out-cache
+* DONE Enable toggling of HTML cache
+* TODO Enable toggling of processed cache
 * TODO Cache unprocessed HTMLs by original URL
-* TODO Proper URL resolving
+* DONE Proper URL resolving
 * TODO Automatic charset detection
-* TODO Allow to specify next processor to use in a previous processor
+* TODO Make current context visible to process-fns
+* DONE Allow to specify next processor to use in a previous processor
 ** Has-one, has-many?!
 * TODO Documentation
 ** Data table
+* TODO Tests!

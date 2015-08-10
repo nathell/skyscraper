@@ -42,7 +42,7 @@
 ;;; URL manipulation
 
 (defn merge-urls
-  "Fills the missing parts of new-url (which can be either absolute, 
+  "Fills the missing parts of new-url (which can be either absolute,
    root-relative, or relative) with corresponding parts from url
    (an absolute URL) to produce a new absolute URL."
   [url new-url]
@@ -59,12 +59,12 @@
 ;;; Micro-templating framework
 
 (defn format-template
-  "Fills in a template string with moving parts from m. template should be 
+  "Fills in a template string with moving parts from m. template should be
    a string containing 'variable names' starting with colons; these names
    are extracted, converted to keywords and looked up in m, which should be
    a map (or a function taking keywords and returning strings).
-  
-   Example: 
+
+   Example:
    (format-template \":group/:user/index\" {:user \"joe\", :group \"admins\"})
    ;=> \"admins/joe/index\" "
   [template m]
@@ -72,7 +72,7 @@
         keys (map #(keyword (subs % 1)) (re-seq re template))
         fmt (string/replace template re "%s")]
     (apply format fmt (map m keys))))
- 
+
 ;;; Downloading
 
 (defn resource
@@ -108,52 +108,55 @@
 
 (defn processor
   "Performs a single stage of scraping."
-  [input-context & 
+  [input-context
+   {:keys [input-cache]
+    :or {input-cache true}}
+   &
    {:keys [url-fn local-cache-fn cache-template process-fn encoding]
     :or {url-fn :url, encoding "UTF-8"}}]
   (let [local-cache-fn (or local-cache-fn #(format-template cache-template %))
         cache-name (local-cache-fn input-context)
-        cache-file (io/file (str cache-dir cache-name ".edn"))
-        processed (if (.exists cache-file)
-                    (read-string (slurp cache-file))
-                    (let [url (url-fn input-context) 
-                          res (resource (download url cache-name) encoding)
-                          processed (->> res 
-                                         process-fn 
-                                         (map #(if (:url %) (update-in % [:url] (partial merge-urls url)) %))
-                                         vec)]
-                      (save cache-file processed)
-                      processed))]
-    (map (partial into input-context) processed)))
+        cache-file (io/file (str cache-dir cache-name ".edn"))]
+    (if (and input-cache (.exists cache-file))
+      (read-string (slurp cache-file))
+      (let [url (url-fn input-context)
+            res (resource (download url cache-name) encoding)
+            processed (->> res
+                           process-fn
+                           (map #(if (:url %) (update-in % [:url] (partial merge-urls url)) %))
+                           vec)]
+        (save cache-file processed)
+        processed))))
 
 (defmacro defprocessor
   [name & opts]
-  `(defn ~name [context#]
-     (processor context# ~@opts)))
+  `(defn ~name [context# user-opts#]
+     (processor context# user-opts# ~@opts)))
 
 ;;; Scraping engine
 
 (defn do-scrape
-  "The workhorse function that runs processors in a hierarchical way."
-  [seed [f & fns] seen-keys]
-  (when f
-    (let [results (f seed) 
-          ks (remove (into #{:url} seen-keys) (keys (first results)))
-          extractor #(vec (map % ks))]
-      (for [result results]
-        (into (extractor result) (do-scrape result fns (into seen-keys ks)))))))
+  [data params]
+  (mapcat (fn [x]
+            (if-let [processor-key (:processor x)]
+              (let [proc (resolve (symbol (name processor-key)))
+                    input-context (dissoc x :processor)
+                    res (proc input-context params)
+                    res (map (partial into input-context) res)]
+                (do-scrape res params))
+              [x]))
+          data))
 
 (defn scrape
-  "Scrapes."
-  [& fns]
-  (do-scrape [nil] fns []))
+  [data & {:as params}]
+  (do-scrape data params))
 
 (defn separate
   [pred coll]
   [(take-while pred coll) (drop-while pred coll)])
 
-(defn uncompress-tree 
-  ([tree] (uncompress-tree [] tree)) 
+(defn uncompress-tree
+  ([tree] (uncompress-tree [] tree))
   ([path tree]
    (let [[node subtrees] (separate (comp not vector?) tree)
          path (into path node)]
