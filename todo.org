@@ -8,5 +8,5 @@
 * DONE Allow to specify next processor to use in a previous processor
 ** Has-one, has-many?!
 * TODO Documentation
-** Data table
+** Data tables and compressed tree representation
 * TODO Tests!
