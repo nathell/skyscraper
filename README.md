@@ -90,7 +90,7 @@ More elaborate examples can be found in the `examples/` directory of the repo.
 
 ## Caveats
 
-Skyscraper is work in progress, and the API is still in flux. Function and macro names, input and output formats are liable to change at any time. Suggestions of improvements are welcome (preferably as GitHub issues), as are pull requests.
+Skyscraper is work in progress. Some things are missing. The API is still in flux. Function and macro names, input and output formats are liable to change at any time. Suggestions of improvements are welcome (preferably as GitHub issues), as are pull requests.
 
 ## License
 

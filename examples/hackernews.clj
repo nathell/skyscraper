@@ -1,3 +1,5 @@
+;; This example is incomplete and will be completed later on.
+
 (ns skyscraper.hackernews
   (:require [skyscraper :refer :all]
             [net.cgrand.enlive-html :refer [select attr? text emit* has pred first-child last-child nth-child]]))
