@@ -121,8 +121,7 @@
       (read-string (slurp cache-file))
       (let [url (url-fn input-context)
             res (resource (download url cache-name) encoding)
-            processed (->> res
-                           process-fn
+            processed (->> (process-fn res input-context)
                            (map #(if (:url %) (update-in % [:url] (partial merge-urls url)) %))
                            vec)]
         (save cache-file processed)

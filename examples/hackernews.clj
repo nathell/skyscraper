@@ -10,7 +10,7 @@
 
 (defprocessor stories
   :cache-template "hn/index"
-  :process-fn (fn [res]
+  :process-fn (fn [res context]
                 (let [rows (select res [:table :> [:tr (nth-child 3)] :table :tr])]
                   (for [[title-row author-row _] (partition 3 (drop-last 2 rows))
                         :let [a-title (first (select title-row [:td.title :a]))

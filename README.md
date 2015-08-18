@@ -41,14 +41,19 @@ A processor also performs janitorial tasks like downloading pages, storing them 
 ```clojure
 (defprocessor landing-page
   :cache-template "mysite/index"
-  :process-fn (fn [res]
+  :process-fn (fn [res context]
                 (for [a (select res [:td :a])]
                   {:page (text a),
                    :url (href a),
                    :processor :subpage})))
 ```
 
-The most important part is `:process-fn`. This is the function called by the processor to extract new information from a page and include it in the context. It takes one parameter, an Enlive resource corresponding to the parsed HTML tree of the page being processed, and should produce a seq of maps that each have a new URL and a new processor (specified as a keyword) to invoke next. If the output doesn’t contain the new URL and processor, it is considered a terminal node and Skyscraper will include it as part of the output.
+The most important part is `:process-fn`. This is the function called by the processor to extract new information from a page and include it in the context. It takes two parameters:
+
+ 1. an Enlive resource corresponding to the parsed HTML tree of the page being processed,
+ 2. the current context (i.e., combined outputs of all processors so far).
+
+The output should be a seq of maps that each have a new URL and a new processor (specified as a keyword) to invoke next. If the output doesn’t contain the new URL and processor, it is considered a terminal node and Skyscraper will include it as part of the output.
 
 ## Caching
 

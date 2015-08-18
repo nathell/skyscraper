@@ -10,7 +10,7 @@
 
 (defprocessor pages
   :cache-template "forests/index"
-  :process-fn (fn [res]
+  :process-fn (fn [res context]
                 (for [a (select res [[:div (attr= :style "float:right;")] :a])]
                   {:page (text a),
                    :url (href a),
@@ -18,7 +18,7 @@
 
 (defprocessor page
   :cache-template "forests/:page"
-  :process-fn (fn [res]
+  :process-fn (fn [res context]
                 (for [a (select res [[:div (attr= :style "clear:both")] :div :div.vah2 :a])]
                   {:forest (text a),
                    :url (href a),
@@ -26,7 +26,7 @@
 
 (defprocessor forest
   :cache-template "forests/:page/:forest"
-  :process-fn (fn [res]
+  :process-fn (fn [res context]
                 (let [divs (select res [[:div (has [[root :span (attr= :style "font-weight:bold")]])]])
                       m (apply hash-map (select divs [enlive/text-node]))]
                   [{:description (-> (select res [[:meta (attr= :name "description")]]) first :attrs :content),
