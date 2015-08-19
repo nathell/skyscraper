@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [clojure.java.io :as io]
             [clojure-csv.core :as csv]
+            [clj-http.client :as http]
             [net.cgrand.enlive-html :refer [html-resource select attr? text emit* has pred first-child last-child]]))
 
 ;;; Directories
@@ -95,9 +96,8 @@
          (log "Downloading %s -> %s" url local-name)
          (try
            (io/make-parents local-name)
-           (with-open [in #_(:body @(http/get url {:as :stream, :timeout 30000})) (io/input-stream url)
-                       out (io/output-stream local-name)]
-             (io/copy in out))
+           (let [content (:body (http/get url {:as :auto, :timeout 30000, :decode-body-headers true}))]
+             (spit local-name content))
            (catch Exception e
              (log "Exception while trying to download %s, retrying: %s" url e)
              (.delete f)
