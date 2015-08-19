@@ -3,7 +3,8 @@
             [clojure.java.io :as io]
             [clojure-csv.core :as csv]
             [clj-http.client :as http]
-            [net.cgrand.enlive-html :refer [html-resource select attr? text emit* has pred first-child last-child]]))
+            [net.cgrand.enlive-html :refer [html-resource select attr? text emit* has pred first-child last-child]])
+  (:import java.net.URL))
 
 ;;; Directories
 
@@ -47,15 +48,7 @@
    root-relative, or relative) with corresponding parts from url
    (an absolute URL) to produce a new absolute URL."
   [url new-url]
-  (let [[_ proto _ hostname path] (re-find #"^(https?)?(://)?([^/]+)(/.*)?$" url)
-        proto (or proto "http")
-        path (or path "/")]
-    (cond
-     (re-find #"^https?://" new-url) new-url
-     (.startsWith new-url "//") (str proto ":" new-url)
-     (.startsWith new-url "/") (str proto "://" hostname new-url)
-     (.endsWith path "/") (str proto "://" hostname path new-url)
-     :otherwise (str proto "://" hostname path "/" new-url))))
+  (str (URL. (URL. url) new-url)))
 
 ;;; Micro-templating framework
 
