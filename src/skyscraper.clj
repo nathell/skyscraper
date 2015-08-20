@@ -127,17 +127,32 @@
 
 ;;; Scraping engine
 
+;; From http://stackoverflow.com/questions/3407876
+(defn unchunk [s]
+  (when (seq s)
+    (lazy-seq
+      (cons (first s)
+            (unchunk (next s))))))
+
+;; From CLJ-1218
+(defn join
+  "Lazily concatenates a sequence-of-sequences into a flat sequence."
+  [s]
+  (lazy-seq
+   (when-let [s (seq s)] 
+     (concat (first s) (join (rest s))))))
+
 (defn do-scrape
   [data params]
-  (mapcat (fn [x]
-            (if-let [processor-key (:processor x)]
-              (let [proc (resolve (symbol (name processor-key)))
-                    input-context (dissoc x :processor)
-                    res (proc input-context params)
-                    res (map (partial into input-context) res)]
-                (do-scrape res params))
-              [x]))
-          data))
+  (join (map (fn [x]
+               (if-let [processor-key (:processor x)]
+                 (let [proc (resolve (symbol (name processor-key)))
+                       input-context (dissoc x :processor)
+                       res (unchunk (proc input-context params))
+                       res (map (partial into input-context) res)]
+                   (do-scrape res params))
+                 (list (dissoc x :url))))
+              data)))
 
 (defn scrape
   [data & {:as params}]
