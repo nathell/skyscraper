@@ -103,15 +103,15 @@
 (defn processor
   "Performs a single stage of scraping."
   [input-context
-   {:keys [input-cache http-options]
-    :or {input-cache true, http-options nil}}
+   {:keys [processed-cache http-options]
+    :or {processed-cache true, http-options nil}}
    &
    {:keys [url-fn local-cache-fn cache-template process-fn encoding]
     :or {url-fn :url, encoding "UTF-8"}}]
   (let [local-cache-fn (or local-cache-fn #(format-template cache-template %))
         cache-name (local-cache-fn input-context)
         cache-file (io/file (str cache-dir cache-name ".edn"))]
-    (if (and input-cache (.exists cache-file))
+    (if (and processed-cache (.exists cache-file))
       (read-string (slurp cache-file))
       (let [url (url-fn input-context)
             res (resource (download url cache-name http-options) encoding)
