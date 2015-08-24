@@ -1,9 +1,9 @@
- (ns skyscraper
+(ns skyscraper
   (:require [clojure.string :as string]
             [clojure.java.io :as io]
             [clojure-csv.core :as csv]
             [clj-http.client :as http]
-            [net.cgrand.enlive-html :refer [html-resource select attr? text emit* has pred first-child last-child]])
+            [net.cgrand.enlive-html :refer [html-resource select]])
   (:import java.net.URL))
 
 ;;; Directories
