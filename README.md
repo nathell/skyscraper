@@ -18,6 +18,14 @@ Skyscraper is work in progress. This means that anything can change at any time.
 
  [Enlive]: http://cgrand.github.com/enlive
 
+The current release is 0.1.1. To use Skyscraper in your project, add the following to the `dependencies` section in your `project.clj`:
+
+```
+[skyscraper "0.1.1"]
+```
+
+ [NEWS.md]: https://github.com/nathell/skyscraper/blob/master/NEWS.md
+
 ## Contexts
 
 A “context” is a map from keywords to arbitrary data. Think of it as “everything we have scraped so far”. A context has two special keys, `:url` and `:processor`, that contains the next URL to visit and the processor to handle it with (see below).
