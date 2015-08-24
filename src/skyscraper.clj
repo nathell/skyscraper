@@ -89,7 +89,7 @@
          (log "Downloading %s -> %s" url local-name)
          (try
            (io/make-parents local-name)
-           (let [content (:body (http/get url {:as :auto, :timeout 30000, :decode-body-headers true}))]
+           (let [content (:body (http/get url {:as :auto, :socket-timeout 5000, :decode-body-headers true}))]
              (spit local-name content))
            (catch Exception e
              (log "Exception while trying to download %s, retrying: %s" url e)
