@@ -77,9 +77,10 @@
 (defn download
   "If a file named by local-path exists in html-cache-dir, returns it
   as a File object.  Otherwise, downloads a file from the given URL,
-  stores it in the cache and returns the cached File object."
-  ([url local-path] (download url local-path 5))
-  ([url local-path retries]
+  stores it in the cache and returns the cached File object. Passes
+  options to clj-http."
+  ([url local-path options] (download url local-path options 5))
+  ([url local-path options retries]
    (let [local-name (str html-cache-dir local-path ".html")
          f (io/file local-name)]
      (when-not (.exists f)
@@ -89,12 +90,12 @@
          (log "Downloading %s -> %s" url local-name)
          (try
            (io/make-parents local-name)
-           (let [content (:body (http/get url {:as :auto, :socket-timeout 5000, :decode-body-headers true}))]
+           (let [content (:body (http/get url (into {:as :auto, :socket-timeout 5000, :decode-body-headers true} options)))]
              (spit local-name content))
            (catch Exception e
              (log "Exception while trying to download %s, retrying: %s" url e)
              (.delete f)
-             (download url local-path (dec retries))))))
+             (download url local-path options (dec retries))))))
      f)))
 
 ;;; Processors
@@ -102,8 +103,8 @@
 (defn processor
   "Performs a single stage of scraping."
   [input-context
-   {:keys [input-cache]
-    :or {input-cache true}}
+   {:keys [input-cache http-options]
+    :or {input-cache true, http-options nil}}
    &
    {:keys [url-fn local-cache-fn cache-template process-fn encoding]
     :or {url-fn :url, encoding "UTF-8"}}]
@@ -113,7 +114,7 @@
     (if (and input-cache (.exists cache-file))
       (read-string (slurp cache-file))
       (let [url (url-fn input-context)
-            res (resource (download url cache-name) encoding)
+            res (resource (download url cache-name http-options) encoding)
             processed (->> (process-fn res input-context)
                            (map #(if (:url %) (update-in % [:url] (partial merge-urls url)) %))
                            vec)]
