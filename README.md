@@ -61,7 +61,7 @@ The most important part is `:process-fn`. This is the function called by the pro
  1. an Enlive resource corresponding to the parsed HTML tree of the page being processed,
  2. the current context (i.e., combined outputs of all processors so far).
 
-The output should be a seq of maps that each have a new URL and a new processor (specified as a keyword) to invoke next. If the output doesn’t contain the new URL and processor, it is considered a terminal node and Skyscraper will include it as part of the output.
+The output should be a seq of maps that each have a new URL and a new processor (specified as a keyword) to invoke next. If the output doesn’t contain the new URL and processor, it is considered a terminal node and Skyscraper will include it as part of the output. If the processor returns one context only, it is automatically wrapped in a seq.
 
 ## Caching
 

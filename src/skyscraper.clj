@@ -100,6 +100,11 @@
 
 ;;; Processors
 
+(defn ensure-seq
+  "Returns the argument verbatim if it's a map. Otherwise, wraps it in a vector."
+  [x]
+  (if (map? x) [x] x))
+
 (defn processor
   "Performs a single stage of scraping."
   [input-context
@@ -116,6 +121,7 @@
       (let [url (url-fn input-context)
             res (resource (download url cache-name http-options) encoding)
             processed (->> (process-fn res input-context)
+                           ensure-seq
                            (map #(if (:url %) (update-in % [:url] (partial merge-urls url)) %))
                            vec)]
         (save cache-file processed)

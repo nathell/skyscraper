@@ -1,5 +1,9 @@
 # History of Skyscraper releases
 
+## Unreleased
+
+- A processor can now return one context only. (Thanks to Bryan Maass.)
+
 ## 0.1.1 (2015-08-24)
 
 - Processors (`process-fn` functions) can now access current context.
