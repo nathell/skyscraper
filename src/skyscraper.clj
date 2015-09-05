@@ -12,6 +12,10 @@
   "All Skyscraper output, either temporary or final, goes under here."
   (str (System/getProperty "user.home") "/skyscraper-data/"))
 
+(def temp-dir
+  "When HTML cache is disabled, then downloaded HTML files go here."
+  (str (System/getProperty "java.io.tmpdir") "/skyscraper-data/"))
+
 (def html-cache-dir
   "Local copies of downloaded HTML files go here."
   (str output-dir "cache/html/"))
@@ -40,6 +44,13 @@
       (locking mutex
         (println s)
         (flush)))))
+
+(defn create-temp-file
+  [prefix suffix]
+  (let [d (io/file temp-dir)]
+    (when-not (.exists d)
+      (.mkdir d))
+    (java.io.File/createTempFile prefix suffix d)))
 
 ;;; URL manipulation
 
@@ -81,16 +92,18 @@
   options to clj-http."
   ([url local-path html-cache options] (download url local-path html-cache options 5))
   ([url local-path html-cache options retries]
-   (let [local-name (str html-cache-dir local-path ".html")
-         f (io/file local-name)]
+   (let [local-file (io/file (str html-cache-dir local-path ".html"))
+         temp-file (when-not html-cache (create-temp-file local-path ".html"))
+         f (if html-cache local-file temp-file)
+         path (.getPath f)]
      (when-not (and html-cache (.exists f))
        (when (zero? retries)
          (throw (Exception. (str "Maximum number of retries exceeded: " url))))
-       (log "Downloading %s -> %s" url local-name)
+       (log "Downloading %s -> %s" url path)
        (try
-         (io/make-parents local-name)
+         (io/make-parents path)
          (let [content (:body (http/get url (into {:as :auto, :socket-timeout 5000, :decode-body-headers true} options)))]
-           (spit local-name content))
+           (spit path content))
          (catch Exception e
            (log "Exception while trying to download %s, retrying: %s" url e)
            (.delete f)
@@ -118,12 +131,14 @@
     (if (and processed-cache (.exists cache-file))
       (read-string (slurp cache-file))
       (let [url (url-fn input-context)
-            res (resource (download url cache-name html-cache http-options) encoding)
+            src (download url cache-name html-cache http-options)
+            res (resource src encoding)
             processed (->> (process-fn res input-context)
                            ensure-seq
                            (map #(if (:url %) (update-in % [:url] (partial merge-urls url)) %))
                            vec)]
         (save cache-file processed)
+        (when-not html-cache (.delete src))
         processed))))
 
 (defmacro defprocessor
