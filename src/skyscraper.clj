@@ -146,14 +146,14 @@
   "Lazily concatenates a sequence-of-sequences into a flat sequence."
   [s]
   (lazy-seq
-   (when-let [s (seq s)] 
+   (when-let [s (seq s)]
      (concat (first s) (join (rest s))))))
 
 (defn do-scrape
   [data params]
   (join (map (fn [x]
                (if-let [processor-key (:processor x)]
-                 (let [proc (resolve (symbol (name processor-key)))
+                 (let [proc (ns-resolve (symbol (or (namespace processor-key) (str *ns*))) (symbol (name processor-key)))
                        input-context (dissoc x :processor)
                        res (unchunk (proc input-context params))
                        res (map (partial into input-context) res)]
