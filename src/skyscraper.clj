@@ -131,14 +131,17 @@
     (if (and processed-cache (.exists cache-file))
       (read-string (slurp cache-file))
       (let [url (url-fn input-context)
+            input-context (assoc input-context :url url)
             src (download url cache-name html-cache http-options)
             res (resource src encoding)
             processed (->> (process-fn res input-context)
                            ensure-seq
                            (map #(if (:url %) (update-in % [:url] (partial merge-urls url)) %))
                            vec)]
-        (save cache-file processed)
-        (when-not html-cache (.delete src))
+        (when processed-cache
+          (save cache-file processed))
+        (when-not html-cache
+          (.delete src))
         processed))))
 
 (defmacro defprocessor

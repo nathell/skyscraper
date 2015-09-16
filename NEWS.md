@@ -3,6 +3,7 @@
 ## Unreleased
 
 - A processor can now return one context only. (Thanks to Bryan Maass.)
+- The `processed-cache` option now works as advertised.
 
 ## 0.1.1 (2015-08-24)
 
