@@ -123,10 +123,10 @@
    {:keys [html-cache processed-cache http-options]
     :or {html-cache true, processed-cache true, http-options nil}}
    &
-   {:keys [url-fn local-cache-fn cache-template process-fn encoding]
+   {:keys [url-fn cache-key-fn cache-template process-fn encoding]
     :or {url-fn :url, encoding "UTF-8"}}]
-  (let [local-cache-fn (or local-cache-fn #(format-template cache-template %))
-        cache-name (local-cache-fn input-context)
+  (let [cache-key-fn (or cache-key-fn #(format-template cache-template %))
+        cache-name (cache-key-fn input-context)
         cache-file (io/file (str cache-dir cache-name ".edn"))]
     (if (and processed-cache (.exists cache-file))
       (read-string (slurp cache-file))
