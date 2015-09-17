@@ -3,7 +3,11 @@
 ## Unreleased
 
 - A processor can now return one context only. (Thanks to Bryan Maass.)
-- The `processed-cache` option now works as advertised.
+- The `processed-cache` option to `scrape` now works as advertised.
+- New `scrape` option: `:html-cache`. (Thanks to ayato-p.)
+- New official `defprocessor` clauses: `:url-fn` and `:cache-key-fn`.
+  - Note: these clauses existed in previous versions but were undocumented.
+- All contexts except the root ones are now guaranteed to contain the `:url` key.
 
 ## 0.1.1 (2015-08-24)
 
