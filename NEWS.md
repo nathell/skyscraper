@@ -1,6 +1,6 @@
 # History of Skyscraper releases
 
-## Unreleased
+## 0.1.2 (2015-09-17)
 
 - A processor can now return one context only. (Thanks to Bryan Maass.)
 - The `processed-cache` option to `scrape` now works as advertised.
