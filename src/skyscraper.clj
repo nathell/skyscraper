@@ -19,7 +19,7 @@
   "Local copies of downloaded HTML files go here."
   (str output-dir "cache/html/"))
 
-(def cache-dir
+(def processed-cache-dir
   "Cache storing the interim results of processing HTML files."
   (str output-dir "cache/processed/"))
 
@@ -123,7 +123,7 @@
    {:keys [url-fn cache-key-fn cache-template process-fn]
     :or {url-fn :url}}]
   (let [html-cache (sanitize-cache html-cache html-cache-dir)
-        processed-cache (sanitize-cache processed-cache cache-dir)
+        processed-cache (sanitize-cache processed-cache processed-cache-dir)
         cache-key-fn (or cache-key-fn #(format-template cache-template %))
         cache-key (cache-key-fn input-context)]
     (or
