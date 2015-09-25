@@ -15,10 +15,6 @@
   "All Skyscraper output, either temporary or final, goes under here."
   (str (System/getProperty "user.home") "/skyscraper-data/"))
 
-(def temp-dir
-  "When HTML cache is disabled, then downloaded HTML files go here."
-  (str (System/getProperty "java.io.tmpdir") "/skyscraper-data/"))
-
 (def html-cache-dir
   "Local copies of downloaded HTML files go here."
   (str output-dir "cache/html/"))
@@ -47,13 +43,6 @@
       (locking mutex
         (println s)
         (flush)))))
-
-(defn create-temp-file
-  [prefix suffix]
-  (let [d (io/file temp-dir)]
-    (when-not (.exists d)
-      (.mkdir d))
-    (java.io.File/createTempFile prefix suffix d)))
 
 ;;; URL manipulation
 
