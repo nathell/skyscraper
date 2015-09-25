@@ -1,8 +1,11 @@
+;;;; Skyscraper - Core library
+
 (ns skyscraper
   (:require [clojure.string :as string]
             [clojure.java.io :as io]
             [clojure-csv.core :as csv]
             [clj-http.client :as http]
+            [skyscraper.cache :as cache]
             [net.cgrand.enlive-html :refer [html-resource select]])
   (:import java.net.URL))
 
@@ -80,35 +83,31 @@
 
 ;;; Downloading
 
-(defn resource
-  "A wrapper for html-resource that allows to specify an encoding (defaults to ISO-8859-2)."
-  ([f] (resource f nil))
-  ([f encoding] (html-resource (io/reader f :encoding (or encoding "ISO-8859-2")))))
+(defn string-resource
+  "Returns an Enlive resource for a HTML snippet passed as a string."
+  [s]
+  (html-resource (java.io.StringReader. s)))
 
 (defn download
-  "If a file named by local-path exists in html-cache-dir, returns it
-  as a File object.  Otherwise, downloads a file from the given URL,
-  stores it in the cache and returns the cached File object. Passes
-  options to clj-http."
+  "If a file named by local-path exists in the HTML cache, returns its
+  content as a string.  Otherwise, downloads a file from the given URL,
+  stores it in the cache and returns the cached file's textual content.
+  Passes options to clj-http."
   ([url local-path html-cache options] (download url local-path html-cache options 5))
   ([url local-path html-cache options retries]
-   (let [local-file (io/file (str html-cache-dir local-path ".html"))
-         temp-file (when-not html-cache (create-temp-file local-path ".html"))
-         f (if html-cache local-file temp-file)
-         path (.getPath f)]
-     (when-not (and html-cache (.exists f))
-       (when (zero? retries)
-         (throw (Exception. (str "Maximum number of retries exceeded: " url))))
-       (log "Downloading %s -> %s" url path)
-       (try
-         (io/make-parents path)
-         (let [content (:body (http/get url (into {:as :auto, :socket-timeout 5000, :decode-body-headers true} options)))]
-           (spit path content))
-         (catch Exception e
-           (log "Exception while trying to download %s, retrying: %s" url e)
-           (.delete f)
-           (download url local-path html-cache options (dec retries)))))
-     f)))
+   (or
+    (cache/load-string html-cache local-path)
+    (do
+      (when (zero? retries)
+        (throw (Exception. (str "Maximum number of retries exceeded: " url))))
+      (log "Downloading %s -> %s" url local-path)
+      (try
+        (let [html (:body (http/get url (into {:as :auto, :socket-timeout 5000, :decode-body-headers true} options)))]
+          (cache/save-string html-cache local-path html)
+          html)
+        (catch Exception e
+          (log "Exception while trying to download %s, retrying: %s" url e)
+          (download url local-path html-cache options (dec retries))))))))
 
 ;;; Processors
 
@@ -117,31 +116,38 @@
   [x]
   (if (map? x) [x] x))
 
+(defn sanitize-cache
+  "Converts a cache argument to the processor to a CacheBackend if it
+   isn't one already."
+  [value cache-dir]
+  (cond
+   (= value true) (cache/fs cache-dir)
+   (not value) (cache/null)
+   :otherwise value))
+
 (defn processor
   "Performs a single stage of scraping."
   [input-context
    {:keys [html-cache processed-cache http-options]
     :or {html-cache true, processed-cache true, http-options nil}}
    &
-   {:keys [url-fn cache-key-fn cache-template process-fn encoding]
-    :or {url-fn :url, encoding "UTF-8"}}]
-  (let [cache-key-fn (or cache-key-fn #(format-template cache-template %))
-        cache-name (cache-key-fn input-context)
-        cache-file (io/file (str cache-dir cache-name ".edn"))]
-    (if (and processed-cache (.exists cache-file))
-      (read-string (slurp cache-file))
+   {:keys [url-fn cache-key-fn cache-template process-fn]
+    :or {url-fn :url}}]
+  (let [html-cache (sanitize-cache html-cache html-cache-dir)
+        processed-cache (sanitize-cache processed-cache cache-dir)
+        cache-key-fn (or cache-key-fn #(format-template cache-template %))
+        cache-key (cache-key-fn input-context)]
+    (or
+      (cache/load processed-cache cache-key)
       (let [url (url-fn input-context)
             input-context (assoc input-context :url url)
-            src (download url cache-name html-cache http-options)
-            res (resource src encoding)
+            src (download url cache-key html-cache http-options)
+            res (string-resource src)
             processed (->> (process-fn res input-context)
                            ensure-seq
                            (map #(if (:url %) (update-in % [:url] (partial merge-urls url)) %))
                            vec)]
-        (when processed-cache
-          (save cache-file processed))
-        (when-not html-cache
-          (.delete src))
+        (cache/save processed-cache cache-key processed)
         processed))))
 
 (defmacro defprocessor
