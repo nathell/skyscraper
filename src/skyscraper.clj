@@ -3,7 +3,7 @@
 (ns skyscraper
   (:require [clojure.string :as string]
             [clojure.java.io :as io]
-            [clojure-csv.core :as csv]
+            [clojure.data.csv :as csv]
             [clj-http.client :as http]
             [skyscraper.cache :as cache]
             [net.cgrand.enlive-html :refer [html-resource select]])
@@ -178,6 +178,13 @@
 (defn scrape
   [data & {:as params}]
   (do-scrape data params))
+
+(defn scrape-csv
+  [data output & {:as params}]
+  (let [ks (vec (reduce into #{} (map keys (do-scrape data params))))]
+    (with-open [f (io/writer output)]
+      (csv/write-csv f [(map name ks)])
+      (csv/write-csv f (map (fn [row-data] (map (comp str row-data) ks)) (do-scrape data (assoc params :update false)))))))
 
 (defn separate
   [pred coll]
