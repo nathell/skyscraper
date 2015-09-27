@@ -1,10 +1,18 @@
 # History of Skyscraper releases
 
+## Unreleased
+
+- Skyscraper now supports pluggable cache backends.
+- The caching mechanism has been completely overhauled and Skyscraper no longer
+  creates temporary files when the HTML cache is disabled.
+
 ## 0.1.2 (2015-09-17)
 
 - A processor can now return one context only. (Thanks to Bryan Maass.)
 - The `processed-cache` option to `scrape` now works as advertised.
 - New `scrape` option: `:html-cache`. (Thanks to ayato-p.)
+- Namespaced keywords are now resolved correctly to processors.
+  (Thanks to ayato-p.)
 - New official `defprocessor` clauses: `:url-fn` and `:cache-key-fn`.
   - Note: these clauses existed in previous versions but were undocumented.
 - All contexts except the root ones are now guaranteed to contain the `:url` key.
