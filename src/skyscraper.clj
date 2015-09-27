@@ -96,7 +96,7 @@
           html)
         (catch Exception e
           (log "Exception while trying to download %s, retrying: %s" url e)
-          (download url local-path html-cache options (dec retries))))))))
+          (download url local-path html-cache force options (dec retries))))))))
 
 ;;; Processors
 
