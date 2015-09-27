@@ -64,6 +64,7 @@
   (load-string [_ _] nil)
   (load [_ _] nil))
 
-(defn null []
+(defn null
   "Creates a null cache backend."
+  []
   (NullCache.))
