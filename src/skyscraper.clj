@@ -82,10 +82,10 @@
   content as a string.  Otherwise, downloads a file from the given URL,
   stores it in the cache and returns the cached file's textual content.
   Passes options to clj-http."
-  ([url local-path html-cache options] (download url local-path html-cache options 5))
-  ([url local-path html-cache options retries]
+  ([url local-path html-cache force options] (download url local-path html-cache force options 5))
+  ([url local-path html-cache force options retries]
    (or
-    (cache/load-string html-cache local-path)
+    (and (not force) (cache/load-string html-cache local-path))
     (do
       (when (zero? retries)
         (throw (Exception. (str "Maximum number of retries exceeded: " url))))
@@ -117,20 +117,22 @@
 (defn processor
   "Performs a single stage of scraping."
   [input-context
-   {:keys [html-cache processed-cache http-options]
-    :or {html-cache true, processed-cache true, http-options nil}}
+   {:keys [html-cache processed-cache update http-options]
+    :or {html-cache true, processed-cache true, update false, http-options nil}}
    &
-   {:keys [url-fn cache-key-fn cache-template process-fn]
+   {:keys [url-fn cache-key-fn cache-template process-fn updatable]
     :or {url-fn :url}}]
   (let [html-cache (sanitize-cache html-cache html-cache-dir)
         processed-cache (sanitize-cache processed-cache processed-cache-dir)
         cache-key-fn (or cache-key-fn #(format-template cache-template %))
-        cache-key (cache-key-fn input-context)]
+        cache-key (cache-key-fn input-context)
+        force (and update updatable)]
     (or
-      (cache/load processed-cache cache-key)
+      (when-not force
+        (cache/load processed-cache cache-key))
       (let [url (url-fn input-context)
             input-context (assoc input-context :url url)
-            src (download url cache-key html-cache http-options)
+            src (download url cache-key html-cache force http-options)
             res (string-resource src)
             processed (->> (process-fn res input-context)
                            ensure-seq
