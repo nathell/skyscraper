@@ -155,17 +155,19 @@
       (cons (first s)
             (unchunk (next s))))))
 
-;; From CLJ-1218
-(defn join
-  "Lazily concatenates a sequence-of-sequences into a flat sequence."
-  [s]
+;; From http://stackoverflow.com/questions/21943577/mapcat-breaking-the-lazyness
+(defn my-mapcat
+  "Like mapcat, but fully lazy."
+  [f coll]
   (lazy-seq
-   (when-let [s (seq s)]
-     (concat (first s) (join (rest s))))))
+   (if (not-empty coll)
+     (concat
+      (f (first coll))
+      (my-mapcat f (rest coll))))))
 
 (defn do-scrape
   [data params]
-  (join (map (fn [x]
+  (my-mapcat (fn [x]
                (if-let [processor-key (:processor x)]
                  (let [proc (ns-resolve (symbol (or (namespace processor-key) (str *ns*))) (symbol (name processor-key)))
                        input-context (dissoc x :processor)
@@ -173,7 +175,7 @@
                        res (map (partial into input-context) res)]
                    (do-scrape res params))
                  (list (dissoc x :url))))
-              data)))
+             data))
 
 (defn scrape
   [data & {:as params}]
