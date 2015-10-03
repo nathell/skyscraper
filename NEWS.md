@@ -1,6 +1,6 @@
 # History of Skyscraper releases
 
-## Unreleased
+## 0.2.0 (2015-10-03)
 
 - Skyscraper now supports pluggable cache backends.
 - The caching mechanism has been completely overhauled and Skyscraper no longer
