@@ -82,21 +82,20 @@
   content as a string.  Otherwise, downloads a file from the given URL,
   stores it in the cache and returns the cached file's textual content.
   Passes options to clj-http."
-  ([url local-path html-cache force options] (download url local-path html-cache force options 5))
-  ([url local-path html-cache force options retries]
-   (or
-    (and (not force) (cache/load-string html-cache local-path))
-    (do
-      (when (zero? retries)
-        (throw (Exception. (str "Maximum number of retries exceeded: " url))))
-      (log "Downloading %s -> %s" url local-path)
-      (try
-        (let [html (:body (http/get url (into {:as :auto, :socket-timeout 5000, :decode-body-headers true} options)))]
-          (cache/save-string html-cache local-path html)
-          html)
-        (catch Exception e
-          (log "Exception while trying to download %s, retrying: %s" url e)
-          (download url local-path html-cache force options (dec retries))))))))
+  [url local-path html-cache force options retries]
+  (or
+   (and (not force) (cache/load-string html-cache local-path))
+   (do
+     (when (zero? retries)
+       (throw (Exception. (str "Maximum number of retries exceeded: " url))))
+     (log "Downloading %s -> %s" url local-path)
+     (try
+       (let [html (:body (http/get url (into {:as :auto, :socket-timeout 5000, :decode-body-headers true} options)))]
+         (cache/save-string html-cache local-path html)
+         html)
+       (catch Exception e
+         (log "Exception while trying to download %s, retrying: %s" url e)
+         (download url local-path html-cache force options (dec retries)))))))
 
 ;;; Processors
 
@@ -117,8 +116,8 @@
 (defn processor
   "Performs a single stage of scraping."
   [input-context
-   {:keys [html-cache processed-cache update http-options]
-    :or {html-cache true, processed-cache true, update false, http-options nil}}
+   {:keys [html-cache processed-cache update http-options retries]
+    :or {html-cache true, processed-cache true, update false, http-options nil, retries 5}}
    &
    {:keys [url-fn cache-key-fn cache-template process-fn updatable]
     :or {url-fn :url}}]
@@ -132,7 +131,7 @@
         (cache/load processed-cache cache-key))
       (let [url (url-fn input-context)
             input-context (assoc input-context :url url)
-            src (download url cache-key html-cache force http-options)
+            src (download url cache-key html-cache force http-options retries)
             res (string-resource src)
             processed (->> (process-fn res input-context)
                            ensure-seq

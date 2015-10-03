@@ -8,6 +8,7 @@
 - Support for capturing scraping results to CSV via `scrape-csv`.
 - Support for updating existing scrapes: new processor flag `:updatable`,
   `scrape` now has an `:update` option.
+- New `scrape` option: `:retries`.
 - Fixed a bug whereby scraping huge datasets would result in an `OutOfMemoryError`.
   (`scrape` no longer holds onto the head of the lazy seq it produces).
 
