@@ -78,7 +78,13 @@ In normal usage (i.e., scraping a site using code that is known to work), it is 
 
 The converse is true when developing Skyscraper-based code and writing your own processors. The HTML cache comes in handy as you try out different ways of obtaining the desired information from the page at hand, as it only has to be downloaded once. On the other hand, disabling the processed cache guarantees that the information will be recomputed when the scraping code changes.
 
-Skyscraper supports pluggable cache backends. The core library contains a protocol that the backends should conform to (`CacheBackend`), as well as two implementations of that protocol: one that doesn’t actually cache data, just pretending to be doing so (a “null cache”), and one that stores data in the filesystem. There are other backends under construction, available as separate libraries. See the file `skyscraper/cache.clj` for details.
+Skyscraper supports pluggable cache backends. The core library contains a protocol that the backends should conform to (`CacheBackend`), as well as two implementations of that protocol: one that doesn’t actually cache data, just pretending to be doing so (a “null cache”), and one that stores data in the filesystem. See the file `skyscraper/cache.clj` for details.
+
+There are other backends under construction, available as separate libraries. These include:
+
+ - [skyscraper-cache-mapdb], a backend storing data in the [MapDB] key-value store
+
+ [skyscraper-cache-mapdb]: https://github.com/nathell/skyscraper-cache-mapdb/
 
 By default, both the HTML cache and the processed cache use the FS backend and are configured to live in `~/skyscraper-data`, respectively under `cache/html` and `cache/processed`.
 
