@@ -5,6 +5,11 @@
 - Skyscraper now supports pluggable cache backends.
 - The caching mechanism has been completely overhauled and Skyscraper no longer
   creates temporary files when the HTML cache is disabled.
+- Support for capturing scraping results to CSV via `scrape-csv`.
+- Support for updating existing scrapes: new processor flag `:updatable`,
+  `scrape` now has an `:update` option.
+- Fixed a bug whereby scraping huge datasets would result in an `OutOfMemoryError`.
+  (`scrape` no longer holds onto the head of the lazy seq it produces).
 
 ## 0.1.2 (2015-09-17)
 
