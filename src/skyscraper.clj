@@ -102,7 +102,7 @@
 (defn ensure-seq
   "Returns the argument verbatim if it's a map. Otherwise, wraps it in a vector."
   [x]
-  (if (map? x) [x] x))
+  (if (map? x) x [x]))
 
 (defn sanitize-cache
   "Converts a cache argument to the processor to a CacheBackend if it
