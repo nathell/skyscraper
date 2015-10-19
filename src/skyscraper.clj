@@ -166,16 +166,21 @@
       (my-mapcat f (rest coll))))))
 
 (defn do-scrape
-  [data params]
-  (my-mapcat (fn [x]
-               (if-let [processor-key (:processor x)]
-                 (let [proc (ns-resolve (symbol (or (namespace processor-key) (str *ns*))) (symbol (name processor-key)))
-                       input-context (dissoc x :processor)
-                       res (unchunk (proc input-context params))
-                       res (map (partial into input-context) res)]
-                   (do-scrape res params))
-                 (list (dissoc x :url))))
-             data))
+  ([data params]
+   (let [ns (if (keyword? data) (namespace data))
+         data-fn (if (keyword? data) (ns-resolve (symbol (or ns (str *ns*))) (symbol (name data))))
+         data (if data-fn (data-fn))]
+     (do-scrape data params ns)))
+  ([data params ns]
+   (my-mapcat (fn [x]
+                 (if-let [processor-key (:processor x)]
+                   (let [proc (ns-resolve (symbol (or (namespace processor-key) ns (str *ns*))) (symbol (name processor-key)))
+                         input-context (dissoc x :processor)
+                         res (unchunk (proc input-context params))
+                         res (map (partial into input-context) res)]
+                     (do-scrape res params ns))
+                   (list (dissoc x :url))))
+               data)))
 
 (defn scrape
   [data & {:as params}]

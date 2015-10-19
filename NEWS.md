@@ -3,6 +3,7 @@
 ## Unreleased
 
 - New function: `get-cache-keys`.
+- `scrape` and friends can now accept a keyword as the first argument.
 
 ## 0.2.0 (2015-10-03)
 
