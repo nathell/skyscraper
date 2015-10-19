@@ -1,5 +1,9 @@
 # History of Skyscraper releases
 
+## Unreleased
+
+- New function: `get-cache-keys`.
+
 ## 0.2.0 (2015-10-03)
 
 - Skyscraper now supports pluggable cache backends.
