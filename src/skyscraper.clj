@@ -131,7 +131,7 @@
       (when-not force
         (cache/load processed-cache cache-key))
       (let [url (url-fn input-context)
-            input-context (assoc input-context :url url)
+            input-context (assoc input-context :url url :cache-key cache-key)
             src (download url cache-key html-cache force http-options retries)
             res (string-resource src)
             processed (->> (process-fn res input-context)
