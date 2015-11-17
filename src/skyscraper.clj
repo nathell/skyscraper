@@ -6,7 +6,8 @@
             [clojure.data.csv :as csv]
             [clj-http.client :as http]
             [skyscraper.cache :as cache]
-            [net.cgrand.enlive-html :refer [html-resource select]])
+            [net.cgrand.enlive-html :refer [html-resource select]]
+            [clojure.set :refer [intersection]])
   (:import java.net.URL))
 
 ;;; Directories
@@ -100,7 +101,7 @@
 ;;; Processors
 
 (defn ensure-seq
-  "Returns the argument verbatim if it's a map. Otherwise, wraps it in a vector."
+  "Returns the argument verbatim if it's not a map. Otherwise, wraps it in a vector."
   [x]
   (if (map? x) [x] x))
 
@@ -165,6 +166,13 @@
       (f (first coll))
       (my-mapcat f (rest coll))))))
 
+(defn allows?
+  "True if all keys in m1 that are also in m2 have equal values in both maps."
+  [m1 m2]
+  (let [ks (intersection (set (keys m1)) (set (keys m2)))
+        f (apply juxt ks)]
+    (= (f m1) (f m2))))
+
 (defn do-scrape
   ([data params]
    (let [ns (if (keyword? data) (namespace data))
@@ -177,7 +185,11 @@
                    (let [proc (ns-resolve (symbol (or (namespace processor-key) ns (str *ns*))) (symbol (name processor-key)))
                          input-context (dissoc x :processor)
                          res (unchunk (proc input-context params))
-                         res (map (partial into input-context) res)]
+                         res (map (partial into input-context) res)
+                         res (if-let [only (:only params)]
+                               (let [only (ensure-seq only)]
+                                 (filter (fn [x] (some #(allows? % x) only)) res))
+                               res)]
                      (do-scrape res params ns))
                    (list (dissoc x :url))))
                data)))
