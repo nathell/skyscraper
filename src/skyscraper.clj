@@ -161,7 +161,7 @@
   "Like mapcat, but fully lazy."
   [f coll]
   (lazy-seq
-   (if (not-empty coll)
+   (when (not-empty coll)
      (concat
       (f (first coll))
       (my-mapcat f (rest coll))))))
@@ -173,27 +173,31 @@
         f (apply juxt ks)]
     (= (f m1) (f m2))))
 
+(defn filter-contexts
+  [data params]
+  (if-let [only (:only params)]
+    (let [only (ensure-seq only)]
+      (filter (fn [x] (some #(allows? % x) only)) data))
+    data))
+
 (defn do-scrape
   ([data params]
    (let [ns (if (keyword? data) (namespace data))
          data-fn (if (keyword? data) (ns-resolve (symbol (or ns (str *ns*))) (symbol (name data))))
-         data (if data-fn (data-fn))]
-     (do-scrape data params ns)))
+         data (if data-fn (data-fn) data)]
+     (do-scrape (filter-contexts data params) params ns)))
   ([data params ns]
-   (my-mapcat (fn [x]
-                 (if-let [processor-key (:processor x)]
-                   (let [proc (ns-resolve (symbol (or (namespace processor-key) ns (str *ns*))) (symbol (name processor-key)))
-                         input-context (dissoc x :processor)
-                         res (unchunk (proc input-context params))
-                         res (map (partial into input-context) res)
-                         res (if-let [only (:only params)]
-                               (let [only (ensure-seq only)]
-                                 (filter (fn [x] (some #(allows? % x) only)) res))
-                               res)]
-                     (do-scrape res params ns))
-                   (list (dissoc x :url))))
-               data)))
-
+   (binding [*print-length* nil *print-level* nil]
+     (my-mapcat (fn [x]
+                  (if-let [processor-key (:processor x)]
+                    (let [proc (ns-resolve (symbol (or (namespace processor-key) ns (str *ns*))) (symbol (name processor-key)))
+                          input-context (dissoc x :processor)
+                          res (unchunk (proc input-context params))
+                          res (map (partial merge input-context) res)
+                          res (filter-contexts res params)]
+                      (do-scrape res params ns))
+                    (list (dissoc x :url))))
+                data))))
 (defn scrape
   [data & {:as params}]
   (do-scrape data params))
