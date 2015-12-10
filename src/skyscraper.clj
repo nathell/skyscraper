@@ -176,8 +176,16 @@
 (defn filter-contexts
   [data params]
   (if-let [only (:only params)]
-    (let [only (ensure-seq only)]
-      (filter (fn [x] (some #(allows? % x) only)) data))
+    (let [filter-fn (if (fn? only)
+                      only
+                      (fn [x] (some #(allows? % x) (ensure-seq only))))]
+      (filter filter-fn data))
+    data))
+
+(defn postprocess-contexts
+  [data params]
+  (if-let [postprocess (:postprocess params)]
+    (postprocess data)
     data))
 
 (defn do-scrape
@@ -185,7 +193,10 @@
    (let [ns (if (keyword? data) (namespace data))
          data-fn (if (keyword? data) (ns-resolve (symbol (or ns (str *ns*))) (symbol (name data))))
          data (if data-fn (data-fn) data)]
-     (do-scrape (filter-contexts data params) params ns)))
+     (do-scrape (-> data
+                    (filter-contexts params)
+                    (postprocess-contexts params))
+                params ns)))
   ([data params ns]
    (binding [*print-length* nil *print-level* nil]
      (my-mapcat (fn [x]
@@ -194,7 +205,8 @@
                           input-context (dissoc x :processor)
                           res (unchunk (proc input-context params))
                           res (map (partial merge input-context) res)
-                          res (filter-contexts res params)]
+                          res (filter-contexts res params)
+                          res (postprocess-contexts res params)]
                       (do-scrape res params ns))
                     (list (dissoc x :url))))
                 data))))
