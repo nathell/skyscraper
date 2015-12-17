@@ -1,6 +1,6 @@
 # History of Skyscraper releases
 
-## Unreleased
+## 0.2.1 (2015-12-17)
 
 - New function: `get-cache-keys`.
 - `scrape` and friends can now accept a keyword as the first argument.
