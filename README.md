@@ -130,7 +130,7 @@ Then the final output will be `({:a 1, :b 2, :c 3} {:a 1, :b 2, :c 4})`.
 There are other functions that may be more convenient to use, depending on the application. These are:
 
  - `do-scrape`: Exactly like `scrape`, but takes a seed and an explicit map of options, instead of keyword arguments. `scrape` is in fact a very thin layer of syntactic sugar on top of `do-scrape`.
- - `scrape-csv`: Invoked as `(scrape-csv seed output-filename params)`. Saves the results of scraping to a CSV file named by `output-filename`. The first line of the file will contain column names (corresponding to leaf context keys) in an unspecified order, while the remaining lines will contain the corresponding data. Relies on the processed cache being enabled, as it invokes the scraping machinery twice (once to obtain a list of keys and once to generate the actual data).
+ - `scrape-csv`: Invoked as `(scrape-csv seed output-filename params)`. Saves the results of scraping to a CSV file named by `output-filename`. The first line of the file will contain column names (corresponding to leaf context keys) in an unspecified order, while the remaining lines will contain the corresponding data. Relies on the processed cache being enabled, as it invokes the scraping machinery twice (once to obtain a list of keys and once to generate the actual data), unless `:all-keys false` is specified, in which case only the keys of first scraped map will be present in the CSV file.
  - `get-cache-keys`: Invoked like `do-scrape`; runs scraping, but instead of normal output, returns a vector containing the generated cache keys and processors that produced them. Not lazy.
 
 ## Examples

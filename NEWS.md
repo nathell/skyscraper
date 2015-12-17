@@ -7,6 +7,7 @@
 - Cache keys are now accessible from within processors (under the
   `:cache-key` key in the context).
 - New `scrape` options: `:only` and `:postprocess`.
+- `scrape-csv` now accepts an `:all-keys` argument and has been rewritten using a helper function, `save-dataset-to-csv`.
 
 ## 0.2.0 (2015-10-03)
 

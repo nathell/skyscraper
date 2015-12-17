@@ -214,12 +214,22 @@
   [data & {:as params}]
   (do-scrape data params))
 
-(defn scrape-csv
-  [data output & {:as params}]
-  (let [ks (vec (reduce into #{} (map keys (do-scrape data params))))]
+(defn save-dataset-to-csv
+  [data output & [keyseq]]
+  (let [keyseq (or keyseq (keys (first data)))]
     (with-open [f (io/writer output)]
-      (csv/write-csv f [(map name ks)])
-      (csv/write-csv f (map (fn [row-data] (map (comp str row-data) ks)) (do-scrape data (assoc params :update false)))))))
+      (csv/write-csv f [(map name keyseq)])
+      (csv/write-csv f (map (fn [row-data]
+                              (map (comp str row-data) keyseq))
+                            data)))))
+
+(defn scrape-csv
+  [seed output & {:keys [all-keys], :or {all-keys true}, :as params}]
+  (if all-keys
+    (let [ks (vec (reduce into #{} (map keys (do-scrape seed params))))
+          data (do-scrape seed (assoc params :update false))]
+      (save-dataset-to-csv data output ks))
+    (save-dataset-to-csv (do-scrape seed params) output)))
 
 ;; FIXME: Callbacks and mutable state are a quick-and-dirty way of
 ;; writing this function without rewriting the rest of the code too
