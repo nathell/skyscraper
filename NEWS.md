@@ -4,6 +4,9 @@
 
 - New function: `get-cache-keys`.
 - `scrape` and friends can now accept a keyword as the first argument.
+- Cache keys are now accessible from within processors (under the
+  `:cache-key` key in the context).
+- New `scrape` options: `:only` and `:postprocess`.
 
 ## 0.2.0 (2015-10-03)
 
