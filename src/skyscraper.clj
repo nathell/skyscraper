@@ -188,6 +188,12 @@
     (postprocess data)
     data))
 
+(defn resolve-processor
+  [processor-key ns]
+  (or
+   (ns-resolve (symbol (or (namespace processor-key) ns (str *ns*))) (symbol (name processor-key)))
+   (throw (Exception. (format "Unable to resolve processor: %s" processor-key)))))
+
 (defn do-scrape
   ([data params]
    (let [ns (if (keyword? data) (namespace data))
@@ -201,7 +207,7 @@
    (binding [*print-length* nil *print-level* nil]
      (my-mapcat (fn [x]
                   (if-let [processor-key (:processor x)]
-                    (let [proc (ns-resolve (symbol (or (namespace processor-key) ns (str *ns*))) (symbol (name processor-key)))
+                    (let [proc (resolve-processor processor-key ns)
                           input-context (dissoc x :processor)
                           res (unchunk (proc input-context params))
                           res (map (partial merge input-context) res)
