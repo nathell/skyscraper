@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [skyscraper :refer :all]
             [skyscraper.cache :as cache]
+            [taoensso.timbre :as timbre]
             [net.cgrand.enlive-html :refer [select text]]))
 
 (defn dummy-site-content
@@ -37,6 +38,8 @@
 
 (defn seed [& _]
   [{:url "http://localhost/0", :processor :root}])
+
+(timbre/set-level! :warn)
 
 (deftest basic-scraping
   (with-redefs [http/get mock-get]
