@@ -7,6 +7,7 @@
             [clj-http.client :as http]
             [skyscraper.cache :as cache]
             [net.cgrand.enlive-html :refer [html-resource select]]
+            [taoensso.timbre :refer [infof warnf]]
             [clojure.set :refer [intersection]])
   (:import java.net.URL))
 
@@ -35,15 +36,6 @@
   (with-open [f (io/writer name)]
     (binding [*out* f *print-length* nil *print-level* nil]
       (prn datum))))
-
-(let [mutex (Object.)]
-  (defn log
-    "Formats and logs a message to *out*. Thread-safe."
-    [& args]
-    (let [s (apply format args)]
-      (locking mutex
-        (println s)
-        (flush)))))
 
 ;;; URL manipulation
 
@@ -89,13 +81,13 @@
    (do
      (when (zero? retries)
        (throw (Exception. (str "Maximum number of retries exceeded: " url))))
-     (log "Downloading %s -> %s" url local-path)
+     (infof "Downloading %s -> %s" url local-path)
      (try
        (let [html (:body (http/get url (into {:as :auto, :socket-timeout 5000, :decode-body-headers true} options)))]
          (cache/save-string html-cache local-path html)
          html)
        (catch Exception e
-         (log "Exception while trying to download %s, retrying: %s" url e)
+         (warnf e "Exception while trying to download %s, retrying" url)
          (download url local-path html-cache force options (dec retries)))))))
 
 ;;; Processors
