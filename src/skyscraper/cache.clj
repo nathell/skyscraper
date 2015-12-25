@@ -68,3 +68,21 @@
   "Creates a null cache backend."
   []
   (NullCache.))
+
+;; An in-memory implementation of CacheBackend backed by two atoms.
+(deftype MemoryCache
+    [strings values]
+  CacheBackend
+  (save-string [cache key string]
+    (swap! strings assoc key string))
+  (save [cache key value]
+    (swap! values assoc key value))
+  (load-string [cache key]
+    (@strings key))
+  (load [cache key]
+    (@values key)))
+
+(defn memory
+  "Creates a memory cache backend."
+  []
+  (MemoryCache. (atom {}) (atom {})))

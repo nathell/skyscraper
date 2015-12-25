@@ -1,5 +1,9 @@
 # History of Skyscraper releases
 
+## Unreleased
+
+- New cache backend: `MemoryCache`.
+
 ## 0.2.1 (2015-12-17)
 
 - New function: `get-cache-keys`.
