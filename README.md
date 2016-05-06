@@ -18,10 +18,10 @@ Skyscraper is work in progress. This means that anything can change at any time.
 
  [Enlive]: http://cgrand.github.com/enlive
 
-The current release is 0.2.1. To use Skyscraper in your project, add the following to the `dependencies` section in your `project.clj`:
+The current release is 0.2.2. To use Skyscraper in your project, add the following to the `dependencies` section in your `project.clj`:
 
 ```
-[skyscraper "0.2.1"]
+[skyscraper "0.2.2"]
 ```
 
  [NEWS.md]: https://github.com/nathell/skyscraper/blob/master/NEWS.md

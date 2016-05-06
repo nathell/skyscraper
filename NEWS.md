@@ -1,6 +1,6 @@
 # History of Skyscraper releases
 
-## Unreleased
+## 0.2.2 (2016-05-06)
 
 - Skyscraper now uses Timbre for logging.
 - New cache backend: `MemoryCache`.
