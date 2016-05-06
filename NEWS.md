@@ -3,6 +3,7 @@
 ## Unreleased
 
 - New cache backend: `MemoryCache`.
+- `download` now supports arbitrarily many retries.
 
 ## 0.2.1 (2015-12-17)
 

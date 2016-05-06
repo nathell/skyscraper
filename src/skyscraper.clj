@@ -79,16 +79,18 @@
   (or
    (and (not force) (cache/load-string html-cache local-path))
    (do
-     (when (zero? retries)
-       (throw (Exception. (str "Maximum number of retries exceeded: " url))))
      (infof "Downloading %s -> %s" url local-path)
-     (try
-       (let [html (:body (http/get url (into {:as :auto, :socket-timeout 5000, :decode-body-headers true} options)))]
-         (cache/save-string html-cache local-path html)
-         html)
-       (catch Exception e
-         (warnf e "Exception while trying to download %s, retrying" url)
-         (download url local-path html-cache force options (dec retries)))))))
+     (first
+       (drop-while #(instance? Exception %)
+         (repeatedly retries
+           #(try
+              (let [html (:body (http/get url (into {:as :auto, :socket-timeout 5000, :decode-body-headers true} options)))]
+                (cache/save-string html-cache local-path html)
+                html)
+              (catch Exception e
+                (warnf e "Exception while trying to download %s, retrying" url)
+                nil))))))
+   (throw (Exception. (str "Maximum number of retries exceeded: " url)))))
 
 ;;; Processors
 
