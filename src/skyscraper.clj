@@ -108,6 +108,15 @@
    (not value) (cache/null)
    :otherwise value))
 
+(defn ensure-processors
+  "Ensures that every context in l that has a processor also
+   has a next URL to visit."
+  [l]
+  (remove #(when (and (:processor %) (not (:url %)))
+             (warnf "Context has a processor but no URL, skipping: %s" (pr-str %))
+             true)
+          l))
+
 (defn processor
   "Performs a single stage of scraping."
   [input-context
@@ -131,6 +140,7 @@
             res (string-resource src)
             processed (->> (process-fn res input-context)
                            ensure-seq
+                           ensure-processors
                            (map #(if (:url %) (update-in % [:url] (partial merge-urls url)) %))
                            vec)]
         (cache/save processed-cache cache-key processed)

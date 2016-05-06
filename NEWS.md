@@ -2,8 +2,10 @@
 
 ## Unreleased
 
+- Skyscraper now uses Timbre for logging.
 - New cache backend: `MemoryCache`.
 - `download` now supports arbitrarily many retries.
+- A situation where a context has a processor but no URL now triggers a warning instead of throwing an exception.
 
 ## 0.2.1 (2015-12-17)
 
