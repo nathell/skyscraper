@@ -117,14 +117,19 @@
              true)
           l))
 
+(defn parse
+  "Parses the HTML to an Enlive resource."
+  [html ctx]
+  (string-resource html))
+
 (defn processor
   "Performs a single stage of scraping."
   [input-context
    {:keys [html-cache processed-cache update http-options retries cache-key-callback processor-name]
     :or {html-cache true, processed-cache true, update false, http-options nil, retries 5, cache-key-callback (constantly nil)}}
    &
-   {:keys [url-fn cache-key-fn cache-template process-fn updatable]
-    :or {url-fn :url}}]
+   {:keys [url-fn cache-key-fn cache-template process-fn parse-fn updatable]
+    :or {url-fn :url, parse-fn parse}}]
   (let [html-cache (sanitize-cache html-cache html-cache-dir)
         processed-cache (sanitize-cache processed-cache processed-cache-dir)
         cache-key-fn (or cache-key-fn #(format-template cache-template %))
@@ -137,7 +142,7 @@
       (let [url (url-fn input-context)
             input-context (assoc input-context :url url :cache-key cache-key)
             src (download url cache-key html-cache force http-options retries)
-            res (string-resource src)
+            res (parse-fn src input-context)
             processed (->> (process-fn res input-context)
                            ensure-seq
                            ensure-processors
