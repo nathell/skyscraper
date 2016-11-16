@@ -178,9 +178,11 @@
 (defn allows?
   "True if all keys in m1 that are also in m2 have equal values in both maps."
   [m1 m2]
-  (let [ks (intersection (set (keys m1)) (set (keys m2)))
-        f (apply juxt ks)]
-    (= (f m1) (f m2))))
+  (let [ks (intersection (set (keys m1)) (set (keys m2)))]
+    (if (seq ks)
+      (let [f (apply juxt ks)]
+        (= (f m1) (f m2)))
+      true)))
 
 (defn filter-contexts
   [data params]

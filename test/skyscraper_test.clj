@@ -68,6 +68,13 @@
        "/baz/foo" "https://foo.pl/baz/foo"
        "foo" "https://foo.pl/bar/foo"))
 
+(deftest test-allows
+  (is (allows? {:k1 1, :k2 2} {:k1 1, :k3 3}))
+  (is (not (allows? {:k1 1, :k2 2} {:k1 1, :k2 3})))
+  (is (allows? {:k1 1} {:k1 1, :k2 2}))
+  (is (allows? {} {:k1 1, :k2 2}))
+  (is (allows? {:k1 1} {:k2 2})))
+
 (defprocessor nil-url-test-processor-root
   :cache-template "nil-url"
   :process-fn (fn [res ctx]
