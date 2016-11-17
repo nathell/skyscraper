@@ -8,8 +8,9 @@
             [skyscraper.cache :as cache]
             [net.cgrand.enlive-html :refer [html-resource select]]
             [taoensso.timbre :refer [infof warnf]]
+            [slingshot.slingshot :refer [try+ throw+]]
             [clojure.set :refer [intersection]])
-  (:import java.net.URL))
+  (:import [java.net URL SocketTimeoutException]))
 
 ;;; Directories
 
@@ -83,13 +84,14 @@
      (first
        (drop-while #(instance? Exception %)
          (repeatedly retries
-           #(try
+           #(try+
               (let [html (:body (http/get url (into {:as :auto, :socket-timeout 5000, :decode-body-headers true} options)))]
                 (cache/save-string html-cache local-path html)
                 html)
-              (catch Exception e
-                (warnf e "Exception while trying to download %s, retrying" url)
-                nil))))))
+              (catch map? e e)
+              (catch SocketTimeoutException e
+                (warnf "Timeout while trying to download %s, retrying" url)
+                e))))))
    (throw (Exception. (str "Maximum number of retries exceeded: " url)))))
 
 ;;; Processors
@@ -122,14 +124,24 @@
   [html ctx]
   (string-resource html))
 
+(defn default-error-handler
+  "Warns about 404s yielding empty seqs, barfs on other errors."
+  [url err]
+  (if (= (:status err) 404)
+    (do
+      (warnf "Download returned error 404 Not Found, pruning scrape tree: %s" url)
+      [])
+    (throw+ err)))
+
 (defn processor
   "Performs a single stage of scraping."
   [input-context
-   {:keys [html-cache processed-cache update http-options retries cache-key-callback processor-name]
-    :or {html-cache true, processed-cache true, update false, http-options nil, retries 5, cache-key-callback (constantly nil)}}
+   {:keys [html-cache processed-cache update http-options retries cache-key-callback processor-name error-handler]
+    :or {html-cache true, processed-cache true, update false, http-options nil, retries 5, cache-key-callback (constantly nil), error-handler default-error-handler}}
    &
    {:keys [url-fn cache-key-fn cache-template process-fn parse-fn updatable]
-    :or {url-fn :url, parse-fn parse}}]
+    :or {url-fn :url, parse-fn parse}
+    :as page-opts}]
   (let [html-cache (sanitize-cache html-cache html-cache-dir)
         processed-cache (sanitize-cache processed-cache processed-cache-dir)
         cache-key-fn (or cache-key-fn #(format-template cache-template %))
@@ -142,12 +154,14 @@
       (let [url (url-fn input-context)
             input-context (assoc input-context :url url :cache-key cache-key)
             src (download url cache-key html-cache force http-options retries)
-            res (parse-fn src input-context)
-            processed (->> (process-fn res input-context)
-                           ensure-seq
-                           ensure-processors
-                           (map #(if (:url %) (update-in % [:url] (partial merge-urls url)) %))
-                           vec)]
+            processed (if (map? src)
+                        (let [error-handler (or (:error-handler page-opts) error-handler)]
+                          (error-handler url src))
+                        (->> (process-fn (parse-fn src input-context) input-context)
+                             ensure-seq
+                             ensure-processors
+                             (map #(if (:url %) (update-in % [:url] (partial merge-urls url)) %))
+                             vec))]
         (cache/save processed-cache cache-key processed)
         processed))))
 

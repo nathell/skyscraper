@@ -3,6 +3,7 @@
 ## Unreleased
 
 - New feature: Custom parse functions.
+- New feature: Customizable error handling strategies.
 - Bugfix: `:only` now doesn’t barf on keys not appearing in seed.
 
 ## 0.2.2 (2016-05-06)
