@@ -70,6 +70,7 @@ In addition, `defprocessor` supports several other clauses that determine the pa
  - `:cache-key-fn` – a function taking the context and returning the cache key (see below). Overrides `:cache-template`. Useful when mere templating does not suffice.
  - `:error-handler` – an error handler (see below).
  - `:updatable` – a boolean (false by default). When true, the pages accessed by this processor are considered to change often. When Skyscraper is run in update mode (see below), these pages will be re-downloaded and re-processed even if they had been present in the HTML or processed caches, respectively.
+ - `:parse-fn` – a custom function that will be used to produce Enlive resources from HTMLs. This is useful rather rarely, e.g., when you’re scraping malformed HTML and need an interim fixup steps before parsing.
 
 ## Error handling
 
