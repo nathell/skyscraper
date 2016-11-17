@@ -1,6 +1,6 @@
 # History of Skyscraper releases
 
-## Unreleased
+## 0.2.3 (2016-11-17)
 
 - New feature: Custom parse functions.
 - New feature: Customizable error handling strategies.
