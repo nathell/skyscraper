@@ -9,7 +9,8 @@
             [net.cgrand.enlive-html :refer [html-resource select]]
             [taoensso.timbre :refer [infof warnf]]
             [slingshot.slingshot :refer [try+ throw+]]
-            [clojure.set :refer [intersection]])
+            [clojure.set :refer [intersection]]
+            [reaver])
   (:import [java.net URL SocketTimeoutException]))
 
 ;;; Directories
@@ -78,7 +79,7 @@
   Passes options to clj-http."
   [url local-path html-cache force options retries]
   (or
-   (and (not force) (cache/load-string html-cache local-path))
+   (and local-path (not force) (cache/load-string html-cache local-path))
    (do
      (infof "Downloading %s -> %s" url local-path)
      (first
@@ -86,7 +87,8 @@
          (repeatedly retries
            #(try+
               (let [html (:body (http/get url (into {:as :auto, :socket-timeout 5000, :decode-body-headers true} options)))]
-                (cache/save-string html-cache local-path html)
+                (when local-path
+                  (cache/save-string html-cache local-path html))
                 html)
               (catch map? e e)
               (catch SocketTimeoutException e
@@ -119,10 +121,17 @@
              true)
           l))
 
-(defn parse
+(defn enlive-parse
   "Parses the HTML to an Enlive resource."
   [html ctx]
   (string-resource html))
+
+(defn reaver-parse
+  "Parses the HTML to a JSoup document."
+  [html ctx]
+  (reaver/parse html))
+
+(def ^:dynamic parse enlive-parse)
 
 (defn default-error-handler
   "Warns about 404s yielding empty seqs, barfs on other errors."
@@ -141,7 +150,7 @@
   default-options
   {:error-handler default-error-handler,
    :html-cache true,
-   :parse-fn parse,
+   :parse-fn #'parse,
    :process-fn default-process-fn,
    :processed-cache true,
    :retries 5,

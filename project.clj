@@ -5,6 +5,6 @@
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [org.clojure/data.csv "0.1.3"]
                  [clj-http "2.0.0"]
-                 [crouton "0.1.2"]
-                 [enlive "1.1.6"]
+                 [reaver "0.1.2"]
+                 [enlive "1.1.6" :exclusions [jsoup]]
                  [com.taoensso/timbre "4.1.4"]])

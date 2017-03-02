@@ -2,9 +2,12 @@
 
 ## Unreleased
 
+- [reaver] (using JSoup) is now available as an optional underlying engine, as an alternative to Enlive.
 - All options can now be provided either per-page or globally. (Thanks to Alexander Solovyov for the suggestion.)
 - All options are now optional, including sane default for `process-fn`.
 - `get-cache-keys` has been removed. If you want the same effect, include `:cache-key` in the desired contexts.
+
+ [reaver]: https://github.com/mischov/reaver
 
 ## 0.2.3 (2016-11-17)
 
