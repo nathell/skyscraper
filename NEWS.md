@@ -1,5 +1,9 @@
 # History of Skyscraper releases
 
+## Unreleased
+
+- All options can now be provided either per-page or globally. (Thanks to Alexander Solovyov for the suggestion.)
+
 ## 0.2.3 (2016-11-17)
 
 - New feature: Custom parse functions.

@@ -133,18 +133,35 @@
       [])
     (throw+ err)))
 
+(def ^:dynamic
+  default-options
+  {:html-cache true,
+   :processed-cache true,
+   :update false,
+   :http-options nil,
+   :retries 5,
+   :cache-key-callback (constantly nil),
+   :error-handler default-error-handler,
+   :url-fn :url,
+   :parse-fn parse})
+
 (defn processor
   "Performs a single stage of scraping."
-  [input-context
-   {:keys [html-cache processed-cache update http-options retries cache-key-callback processor-name error-handler]
-    :or {html-cache true, processed-cache true, update false, http-options nil, retries 5, cache-key-callback (constantly nil), error-handler default-error-handler}}
-   &
-   {:keys [url-fn cache-key-fn cache-template process-fn parse-fn updatable]
-    :or {url-fn :url, parse-fn parse}
-    :as page-opts}]
-  (let [html-cache (sanitize-cache html-cache html-cache-dir)
-        processed-cache (sanitize-cache processed-cache processed-cache-dir)
-        cache-key-fn (or cache-key-fn #(format-template cache-template %))
+  [processor-name input-context options page-options]
+  (let [options (merge default-options options page-options)
+        {:keys [cache-key-callback
+                cache-template
+                error-handler
+                http-options
+                parse-fn
+                process-fn
+                retries
+                updatable
+                update
+                url-fn]} options
+        html-cache (sanitize-cache (:html-cache options) html-cache-dir)
+        processed-cache (sanitize-cache (:processed-cache options) processed-cache-dir)
+        cache-key-fn (or (:cache-key-fn options) #(format-template cache-template %))
         cache-key (cache-key-fn input-context)
         force (and update updatable)]
     (cache-key-callback processor-name cache-key)
@@ -155,8 +172,7 @@
             input-context (assoc input-context :url url :cache-key cache-key)
             src (download url cache-key html-cache force http-options retries)
             processed (if (map? src)
-                        (let [error-handler (or (:error-handler page-opts) error-handler)]
-                          (error-handler url src))
+                        (error-handler url src)
                         (->> (process-fn (parse-fn src input-context) input-context)
                              ensure-seq
                              ensure-processors
@@ -168,7 +184,7 @@
 (defmacro defprocessor
   [processor-name & opts]
   `(defn ~processor-name [context# user-opts#]
-     (processor context# (assoc user-opts# :processor-name ~(keyword (name processor-name))) ~@opts)))
+     (processor ~(keyword (name processor-name)) context# user-opts# ~(apply hash-map opts))))
 
 ;;; Scraping engine
 
