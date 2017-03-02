@@ -26,18 +26,26 @@
   (swap! hits inc)
   {:body (dummy-site-content (url-number url))})
 
+(defn process-root [res ctx]
+  (let [num (text (first (select res [:h1])))
+        subpages (select res [:a])]
+    (if (seq subpages)
+      (for [a subpages]
+        {:processor :root, :url (href a)})
+      {:number num})))
+
 (defprocessor root
   :cache-key-fn (fn [ctx] (str "numbers/" (url-number (:url ctx))))
-  :process-fn (fn [res ctx]
-                (let [num (text (first (select res [:h1])))
-                      subpages (select res [:a])]
-                  (if (seq subpages)
-                    (for [a subpages]
-                      {:processor :root, :url (href a)})
-                    {:number num}))))
+  :process-fn process-root)
+
+(defprocessor root-uncached
+  :process-fn process-root)
 
 (defn seed [& _]
   [{:url "http://localhost/0", :processor :root}])
+
+(defn seed-uncached [& _]
+  [{:url "http://localhost/0", :processor :root-uncached}])
 
 (timbre/set-level! :warn)
 
@@ -58,8 +66,9 @@
       (let [res1 (doall (scrape :skyscraper-test/seed :html-cache cache :processed-cache cache))
             res2 (doall (scrape :skyscraper-test/seed :html-cache cache :processed-cache nil))
             res3 (doall (scrape :skyscraper-test/seed :html-cache nil :processed-cache cache))
-            res4 (doall (scrape :skyscraper-test/seed :html-cache nil :processed-cache nil))]
-        (is (= res1 res2 res3 res4))))))
+            res4 (doall (scrape :skyscraper-test/seed :html-cache nil :processed-cache nil))
+            res5 (doall (scrape :skyscraper-test/seed-uncached :html-cache nil :processed-cache nil))]
+        (is (= res1 res2 res3 res4 res5))))))
 
 (deftest test-merge-urls
   (are [y z] (= (merge-urls "https://foo.pl/bar/baz" y) z)

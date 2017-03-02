@@ -133,16 +133,20 @@
       [])
     (throw+ err)))
 
+(defn default-process-fn
+  [res ctx]
+  {:resource res})
+
 (def ^:dynamic
   default-options
-  {:html-cache true,
+  {:error-handler default-error-handler,
+   :html-cache true,
+   :parse-fn parse,
+   :process-fn default-process-fn,
    :processed-cache true,
-   :update false,
-   :http-options nil,
    :retries 5,
-   :error-handler default-error-handler,
-   :url-fn :url,
-   :parse-fn parse})
+   :update false,
+   :url-fn :url})
 
 (defn processor
   "Performs a single stage of scraping."
@@ -159,24 +163,28 @@
                 url-fn]} options
         html-cache (sanitize-cache (:html-cache options) html-cache-dir)
         processed-cache (sanitize-cache (:processed-cache options) processed-cache-dir)
-        cache-key-fn (or (:cache-key-fn options) #(format-template cache-template %))
-        cache-key (cache-key-fn input-context)
+        cache-key-fn (or (:cache-key-fn options)
+                         (when cache-template
+                           #(format-template cache-template %)))
+        cache-key (when cache-key-fn
+                    (cache-key-fn input-context))
         force (and update updatable)]
-    (or
-      (when-not force
-        (cache/load processed-cache cache-key))
-      (let [url (url-fn input-context)
-            input-context (assoc input-context :url url :cache-key cache-key)
-            src (download url cache-key html-cache force http-options retries)
-            processed (if (map? src)
-                        (error-handler url src)
-                        (->> (process-fn (parse-fn src input-context) input-context)
-                             ensure-seq
-                             ensure-processors
-                             (map #(if (:url %) (update-in % [:url] (partial merge-urls url)) %))
-                             vec))]
-        (cache/save processed-cache cache-key processed)
-        processed))))
+    (or (when (and cache-key (not force))
+          (cache/load processed-cache cache-key))
+        (let [url (url-fn input-context)
+              input-context (assoc input-context :url url :cache-key cache-key)
+              src (download url cache-key html-cache force http-options retries)
+              processed (if (map? src)
+                          (error-handler url src)
+                          (->> (process-fn (parse-fn src input-context) input-context)
+                               ensure-seq
+                               ensure-processors
+                               (map #(if (:url %) (update-in % [:url] (partial merge-urls url)) %))
+                               vec))]
+          (if cache-key
+            (cache/save processed-cache cache-key processed)
+            (infof "%s: not caching since :cache-template not specified" (name processor-name)))
+          processed))))
 
 (defmacro defprocessor
   [processor-name & opts]
