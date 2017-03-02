@@ -3,6 +3,7 @@
 ## Unreleased
 
 - All options can now be provided either per-page or globally. (Thanks to Alexander Solovyov for the suggestion.)
+- `get-cache-keys` has been removed. If you want the same effect, include `:cache-key` in the desired contexts.
 
 ## 0.2.3 (2016-11-17)
 

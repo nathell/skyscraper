@@ -140,7 +140,6 @@
    :update false,
    :http-options nil,
    :retries 5,
-   :cache-key-callback (constantly nil),
    :error-handler default-error-handler,
    :url-fn :url,
    :parse-fn parse})
@@ -149,8 +148,7 @@
   "Performs a single stage of scraping."
   [processor-name input-context options page-options]
   (let [options (merge default-options options page-options)
-        {:keys [cache-key-callback
-                cache-template
+        {:keys [cache-template
                 error-handler
                 http-options
                 parse-fn
@@ -164,7 +162,6 @@
         cache-key-fn (or (:cache-key-fn options) #(format-template cache-template %))
         cache-key (cache-key-fn input-context)
         force (and update updatable)]
-    (cache-key-callback processor-name cache-key)
     (or
       (when-not force
         (cache/load processed-cache cache-key))
@@ -277,19 +274,6 @@
           data (do-scrape seed (assoc params :update false))]
       (save-dataset-to-csv data output ks))
     (save-dataset-to-csv (do-scrape seed params) output)))
-
-;; FIXME: Callbacks and mutable state are a quick-and-dirty way of
-;; writing this function without rewriting the rest of the code too
-;; much, but they have many drawbacks. I'd like this function to
-;; be lazy and pure.
-(defn get-cache-keys
-  "Runs scraping on data and params, but returns a vector of cache keys
-  along with processor names that generated them."
-  [data & {:as params}]
-  (let [result (atom [])
-        cache-key-callback #(swap! result conj {:processor %1, :key %2})]
-    (dorun (do-scrape data (assoc params :cache-key-callback cache-key-callback)))
-    @result))
 
 (defn separate
   [pred coll]
