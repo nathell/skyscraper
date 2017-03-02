@@ -1,5 +1,7 @@
 # Skyscraper
 
+[![Join the chat at https://gitter.im/nathell/skyscraper](https://badges.gitter.im/nathell/skyscraper.svg)](https://gitter.im/nathell/skyscraper?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 ## Structural scraping
 
 What is structural scraping? Think of [Enlive]. It allows you to parse arbitrary HTML and extract various bits of information out of it: subtrees or parts of subtrees determined by selectors. You can then convert this information to some other format, easier for machine consumption, or process it in whatever other way you wish. This is called _scraping_.
