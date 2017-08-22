@@ -163,6 +163,7 @@
   (let [options (merge default-options options page-options)
         {:keys [cache-template
                 error-handler
+                force
                 http-options
                 parse-fn
                 process-fn
@@ -177,7 +178,7 @@
                            #(format-template cache-template %)))
         cache-key (when cache-key-fn
                     (cache-key-fn input-context))
-        force (and update updatable)]
+        force (or force (and update updatable))]
     (or (when (and cache-key (not force))
           (cache/load processed-cache cache-key))
         (let [url (url-fn input-context)

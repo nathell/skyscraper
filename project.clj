@@ -1,4 +1,4 @@
-(defproject skyscraper "0.2.3"
+(defproject skyscraper "0.3.0-SNAPSHOT"
   :description "Structural scraping for the rest of us."
   :license {:name "MIT", :url "https://github.com/nathell/skyscraper/blob/master/README.md#license"}
   :scm {:name "git", :url "https://github.com/nathell/skyscraper"}
