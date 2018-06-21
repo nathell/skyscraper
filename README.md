@@ -1,3 +1,7 @@
+# NOTE NOTE NOTE
+
+This is an experimental branch of Skyscraper that is a major rewrite, using core.async, and will eventually become 0.3.0. This code should be currently considered unstable. Everything can break at any moment. The documentation below is obsolete and needs updating.
+
 # Skyscraper
 
 ## Structural scraping

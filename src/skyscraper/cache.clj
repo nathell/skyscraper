@@ -69,6 +69,13 @@
   []
   (NullCache.))
 
+(extend-protocol CacheBackend
+  nil
+  (save-string [_ _ _] nil)
+  (save [_ _ _] nil)
+  (load-string [_ _] nil)
+  (load [_ _] nil))
+
 ;; An in-memory implementation of CacheBackend backed by two atoms.
 (deftype MemoryCache
     [strings values]
