@@ -1,42 +1,16 @@
 (ns skyscraper
-  (:require [clojure.core.async :as async
-             :refer [<! <!! >! >!! chan close! go go-loop put!]]
-            [clojure.data.csv :as csv]
-            [clojure.java.io :as io]
-            [clojure.set :refer [intersection]]
-            [clojure.string :as string]
-            [org.httpkit.client :as http]
-            [reaver]
-            [skyscraper.async :refer [lifo-buffer]]
-            [skyscraper.cache :as cache]
-            [skyscraper.sqlite :as sqlite]
-            [taoensso.timbre :as timbre :refer [infof warnf errorf]]
-            [taoensso.timbre.appenders.core :as appenders])
+  (:require
+    [clojure.core.async :as async
+     :refer [<! <!! >! >!! alts! alts!!
+             chan close! go go-loop put!]]
+    [clojure.set :refer [intersection]]
+    [clojure.string :as string]
+    [org.httpkit.client :as http]
+    [reaver])
   (:import [java.net URL]
            [org.httpkit.client HttpClient TimeoutException]))
 
-;;; Micro-templating framework
-
-(defn format-template
-  "Fills in a template string with moving parts from m. template should be
-   a string containing 'variable names' starting with colons; these names
-   are extracted, converted to keywords and looked up in m, which should be
-   a map (or a function taking keywords and returning strings).
-
-   Example:
-   (format-template \":group/:user/index\" {:user \"joe\", :group \"admins\"})
-   ;=> \"admins/joe/index\" "
-  [template m]
-  (let [re #":[a-z-]+"
-        keys (map #(keyword (subs % 1)) (re-seq re template))
-        fmt (string/replace template re "%s")]
-    (apply format fmt (map m keys))))
-
 (defonce processors (atom {}))
-
-(defn extract-cookie [headers]
-  (when-let [set-cookie (:set-cookie headers)]
-    (first (string/split set-cookie #"; "))))
 
 (defn defprocessor [name & {:keys [process-fn], :as args}]
   (swap! processors assoc name (merge {:name name} args)))
@@ -50,18 +24,12 @@
    (let [processor (@processors processor-name)]
      (ensure-seq ((:process-fn processor) document context)))))
 
-(defn- cookie-headers [context]
-  (when-let [cookie (::cookie context)]
-    {:headers {"Cookie" cookie}}))
-
-(defn merge-urls
-  "Fills the missing parts of new-url (which can be either absolute,
-   root-relative, or relative) with corresponding parts from url
-   (an absolute URL) to produce a new absolute URL."
-  [url new-url]
-  (if (string/starts-with? new-url "?")
-    (str (string/replace url #"\?.*" "") new-url)
-    (str (URL. (URL. url) new-url))))
+(defn dissoc-internal [ctx]
+  (let [removed-keys #{:method :processor :desc :form-params}]
+    (into {}
+          (remove (fn [[k _]] (or (contains? removed-keys k)
+                                  (= (namespace k) (namespace ::x)))))
+          ctx)))
 
 (defn allows?
   "True if all keys in m1 that are also in m2 have equal values in both maps."
@@ -81,104 +49,14 @@
       (filter filter-fn data))
     data))
 
-(defn dissoc-internal [ctx]
-  (let [removed-keys #{:method :processor :desc :form-params}]
-    (into {}
-          (remove (fn [[k _]] (or (contains? removed-keys k)
-                                  (= (namespace k) (namespace ::x)))))
-          ctx)))
-
-(defn describe [ctx]
-  (pr-str (dissoc-internal ctx)))
-
-(defn cache-key [{:keys [cache-template cache-key-fn]} context]
-  (let [cache-key-fn (or cache-key-fn
-                         (when cache-template
-                           (partial format-template cache-template)))]
-    (when cache-key-fn
-      (cache-key-fn context))))
-
-(defn dbgl [x]
-  (binding [*out* *err*]
-    (print x)
-    (flush)))
-
-(defn downloader [to-process url-chan body-chan
-                  {:keys [max-connections retries timeout html-cache]
-                   :or {max-connections 10, retries 5, timeout 60000}}]
-  (let [client (HttpClient. max-connections)
-        sem (java.util.concurrent.Semaphore. max-connections)]
-    (go-loop []
-      (infof "downloader: awaiting context")
-      (let [_ (dbgl "A")
-            contexts (<! url-chan)
-            _ (dbgl "a")]
-        (when contexts
-          (doseq [context contexts]
-            (let [orig context
-                  processor (@processors (:processor context))
-                  ckey (cache-key processor context)
-                  cached (when (and ckey (not (:updatable processor))) (cache/load-string html-cache ckey))
-                  context (assoc context ::cache-key ckey)]
-              (if cached
-                (do
-                  (infof "downloader: retrieved from cache: %s" (describe context))
-                  (dbgl "B")
-                  (>! body-chan (assoc context ::response {:body cached} ::orig orig))
-                  (dbgl "b"))
-                (let [req (merge {:client client
-                                  :timeout timeout
-                                  :method :get}
-                                 (cookie-headers context)
-                                 (select-keys context [:url :method :form-params :headers]))
-                      handler (fn [{:keys [opts body headers status error] :as resp}]
-                                (cond
-                                  error (if (instance? TimeoutException error)
-                                          (do
-                                            (warnf "downloader: %s timed out, requeuing" (describe context))
-                                            (>! url-chan [context]))
-                                          (let [retry (inc (or (::retry context) 0))]
-                                            (if (< retry retries)
-                                              (do
-                                                (warnf "downloader: %s: unexpected error: %s, retrying" (describe context) error)
-                                                (dbgl "C")
-                                                (>! url-chan [(assoc context ::retry retry)])
-                                                (dbgl "c"))
-                                              (do
-                                                (warnf "downloader: %s: unexpected error: %s, giving up" (describe context) error)
-                                                (dbgl "D")
-                                                (>! body-chan {::error true, ::orig (dissoc orig ::retry ::cache-key)})
-                                                (dbgl "d")))))
-                                  (= status 200) (let [cookie (extract-cookie headers)
-                                                       context (cond-> context
-                                                                 cookie (assoc ::cookie cookie))]
-                                                   (infof "downloader: downloaded %s" (describe context))
-                                                   (when ckey
-                                                     (cache/save-string html-cache ckey (:body resp)))
-                                                   (dbgl "E")
-                                                   (>! body-chan
-                                                       (assoc context
-                                                              ::response resp
-                                                              ::orig orig))
-                                                   (dbgl "e"))
-                                  :otherwise (let [retry (inc (or (::retry context) 0))]
-                                               (if (< retry retries)
-                                                 (do
-                                                   (warnf "downloader: %s: unexpected status: %s, retrying" (describe context) status)
-                                                   (dbgl "F")
-                                                   (>! url-chan [(assoc context ::retry retry)])
-                                                   (dbgl "f"))
-                                                 (do
-                                                   (warnf "downloader: %s: unexpected status: %s, giving up" (describe context) status)
-                                                   (dbgl "G")
-                                                   (>! body-chan {::error true, ::orig (dissoc orig ::retry ::cache-key)})
-                                                   (dbgl "g")))))
-                                (.release sem))]
-                  (infof "downloader: waiting" (describe context))
-                  (.acquire sem)
-                  (infof "downloader: downloading %s" (describe context))
-                  (http/request req handler)))))
-          (recur))))))
+(defn merge-urls
+  "Fills the missing parts of new-url (which can be either absolute,
+   root-relative, or relative) with corresponding parts from url
+   (an absolute URL) to produce a new absolute URL."
+  [url new-url]
+  (if (string/starts-with? new-url "?")
+    (str (string/replace url #"\?.*" "") new-url)
+    (str (URL. (URL. url) new-url))))
 
 (defn merge-contexts [old new]
   (let [preserve (dissoc-internal old)
@@ -189,110 +67,178 @@
               new)]
     (merge preserve new)))
 
-(defn separate [f s]
-  [(filter f s) (filter (complement f) s)])
+(defn gimme [{:keys [todo doing] :as s}]
+  (if-let [popped (first todo)]
+    [popped
+     {:todo (rest todo)
+      :doing (conj doing popped)}]
+    [nil s]))
 
-(defn maybe-store-in-db [db {:keys [name db-columns id] :as q} contexts]
-  (if (and db db-columns)
-    (let [[skipped inserted] (separate ::db-skip contexts)
-          new-items (sqlite/insert-all! db name id db-columns inserted)]
-      (into (vec skipped) new-items))
-    contexts))
+(let [x (Object.)]
+  (defn log [who i & items]
+    (locking x
+      (if i
+        (print (str "[" who " " i "] "))
+        (print (str "[" who "] ")))
+      (apply println items)
+      (flush))))
 
-(defn grinder [to-process url-chan body-chan output-chan params]
-  (go-loop []
-    (infof "grinder: awaiting context, first to process: %s" (pr-str (first @to-process)))
-    (dbgl "H")
-    (when-let [context (<! body-chan)]
-      (dbgl "h")
-      (infof "grinder: grinding %s" (describe context))
-      (let [new-items (when-not (::error context)
-                        (let [document (reaver/parse (get-in context [::response :body]))
-                              processor (@processors (:processor context))]
-                          (as-> (try
-                                  (-> document
-                                      ((:process-fn processor) context)
-                                      ensure-seq)
-                                  (catch Exception e
-                                    (errorf e "grinder: processor %s for %s threw error" (:processor context) (describe context))
-                                    [])) result
-                            (map #(merge-contexts context %) result)
-                            (maybe-store-in-db (:db params) processor result)
-                            (filter-contexts result params))))
-            new-atom (swap! to-process
-                            #(-> %
-                                 (disj (::orig context))
-                                 (into (filter :processor new-items))))]
-        (infof "grinder: Outputting %s (%s/%s) items for %s" (count new-items) (count (filter :processor new-items)) (count (remove :processor new-items)) (describe context))
-        (let [with-processor (filter :processor new-items)
-              without-processor (remove :processor new-items)]
-          (dbgl "I")
-          (>! url-chan with-processor)
-          (dbgl "i")
-          (dbgl "J")
-          (>! output-chan (map dissoc-internal without-processor))
-          (dbgl "j")
-          #_
-          (doseq [item new-items]
-            (if (:processor item)
-              (do
-                (dbgl "I")
-                (>! url-chan item)
-                (dbgl "i"))
-              (do
-                (dbgl "J")
-                (>! output-chan (dissoc-internal item))
-                (dbgl "j")))))
-        (if (seq new-atom)
-          (recur)
-          (do
-            (close! url-chan)
-            (close! body-chan)
-            (close! output-chan)))))))
+(defn done [{:keys [todo doing] :as s}
+            {:keys [done new-items]}
+            want]
+  (if-not (contains? doing done)
+    {:unexpected done, :state s}
+    (let [all-todo (into todo new-items)
+          giveaway (take want all-todo)
+          new-todo (drop want all-todo)
+          doing (-> doing (disj done) (into giveaway))]
+      {:want (- want (count giveaway))
+       :giveaway giveaway
+       :terminate (and (empty? doing) (empty? new-todo))
+       :state {:todo new-todo, :doing doing}})))
 
-(defn initialize [seed input-chan]
-  (dbgl "K")
-  (>!! input-chan seed)
-  (dbgl "k"))
+(defn add-todo [state item]
+  (update state :todo conj item))
 
-(def lifo-buffer-size 1)
+(defn processed [context result]
+  {:done context, :new-items [result]})
 
-(defn scrape [seed & {:as params}]
-  (let [input-chan (chan (lifo-buffer lifo-buffer-size))
-        body-chan (chan)
-        output-chan (chan)
-        seed (filter-contexts seed params)
-        to-process (atom (set seed))]
-    (downloader to-process input-chan body-chan (select-keys params [:html-cache]))
-    (grinder to-process input-chan body-chan output-chan params)
-    (initialize seed input-chan)
-    (with-open [f (io/writer "output.dat")]
-      (dbgl "L")
-      (loop [x (<!! output-chan)]
-        (dbgl "m")
-        (when x
-          #_(binding [*out* f]
-              (prn x))
-          (dbgl "M")
-          (recur (<!! output-chan)))))
-    nil))
+(defn initial-state [items]
+  {:todo (into (list) items)
+   :doing #{}})
 
-(defn read-all
-  [input]
-  (with-open [f (java.io.PushbackReader. (io/reader input))]
-    (let [eof (Object.)]
-      (doall (take-while #(not= % eof) (repeatedly #(read f false eof)))))))
+(defn governor [{:keys [parallelism]} seed control-chan data-chan terminate-chan]
+  (go-loop [state (initial-state seed)
+            want 0
+            terminating nil]
+    (let [dlog (partial log "governor" nil)
+          _ (dlog "Waiting for message" (count (:todo state)) (count (:doing state)) want)
+          message (<! control-chan)]
+      (dlog (if (= message :gimme) "Got gimme" "Got message"))
+      (cond
+        terminating (when (pos? terminating)
+                      (>! data-chan :terminate)
+                      (if (= terminating 1)
+                        (close! terminate-chan)
+                        (recur state want (dec terminating))))
+        (= message :gimme) (let [[res state] (gimme state)]
+                             (dlog "Giving" (keys res))
+                             (if res
+                               (do
+                                 (>! data-chan res)
+                                 (recur state want nil))
+                               (recur state (inc want) nil)))
+        :otherwise (let [{:keys [unexpected want giveaway terminate state]}
+                         (done state message want)]
+                     (cond
+                       unexpected (do
+                                    (dlog "Unexpected:" message)
+                                    (recur state want nil))
+                       terminate (do
+                                   (dlog "Entering termination mode")
+                                   (dotimes [i want]
+                                     (>! data-chan :terminate))
+                                   (recur state want (- parallelism want)))
+                       :else (do
+                               (dlog "Giving away:" (mapv keys giveaway))
+                               (doseq [item giveaway]
+                                 (>! data-chan item))
+                               (recur state want nil))))))))
 
-(defn save-dataset-to-csv
-  [data output & [keyseq]]
-  (let [keyseq (or keyseq (keys (first data)))]
-    (with-open [f (io/writer output)]
-      (csv/write-csv f [(map name keyseq)])
-      (csv/write-csv f (map (fn [row-data]
-                              (map (comp str row-data) keyseq))
-                            data)))))
+(defn describe [ctx]
+  (:url ctx))
 
-#_
-(timbre/merge-config!
- {:appenders {:println {:enabled? false},
-              :spit (appenders/spit-appender {:fname "skyscraper-next.log"})}})
+(defn download [{:keys [timeout retries]}
+                client sem context control-chan]
+  (let [orig context
+        dlog (partial log "download" nil)
+        req (merge {:client client
+                    :timeout timeout
+                    :method :get}
+                   (select-keys context [:url :method :form-params]))
+        send-retry (fn [error]
+                     (let [retry (inc (or (::retry context) 0))]
+                       (if (< retry retries)
+                         (do
+                           (dlog "Unexpected error - retry" retry error "context:" context)
+                           (>!! control-chan (processed orig (assoc context ::retry retry))))
+                         (do
+                           (dlog "Unexpected error - giving up" error "context:" context)
+                           (>!! control-chan (processed orig {::error error, ::context context}))))))
+        handler (fn [{:keys [opts body headers status error] :as resp}]
+                        (cond
+                          error (if (instance? TimeoutException error)
+                                  (do
+                                    (dlog "Timeout:" context)
+                                    (>!! control-chan (processed orig context)))
+                                  (send-retry error))
+                          (= status 200) (do
+                                           (dlog "downloaded" (describe context))
+                                           #_(when ckey
+                                             (cache/save-string html-cache ckey (:body resp)))
+                                           (>!! control-chan (processed orig (assoc context ::response resp))))
+                          :otherwise (send-retry {:status status}))
+                        (.release sem))]
+          (dlog "waiting")
+          (.acquire sem)
+          (dlog "downloading" (describe context))
+          (http/request req handler)))
+
+(defn process [{:keys [number] :as job}]
+  (let [new-items (when (< number 100)
+                    (for [i (range 1 4)]
+                      {:number (+ (* number 10) i)}))]
+    {:done job, :new-items new-items}))
+
+(defn worker [options i client sem control-chan data-chan]
+  (let [dlog (partial log "worker" i)]
+    (go-loop []
+      (dlog "Sending gimme")
+      (>! control-chan :gimme)
+      (dlog "Waiting for reply")
+      (let [context (<! data-chan)]
+        (cond
+          (= context :terminate) (dlog "Terminating")
+          (::error context) (dlog "Got error:" (::error context))
+          (not (::response context)) (download options client sem context control-chan)
+          :otherwise (do
+                       (let [document (reaver/parse (get-in context [::response :body]))
+                             processor (@processors (:processor context))
+                             output (as-> (try
+                                            (-> document
+                                                ((:process-fn processor) context)
+                                                ensure-seq)
+                                            (catch Exception e
+                                              (dlog "processor threw error: %s" (:processor context) (describe context))
+                                              [])) result
+                                      (map #(merge-contexts context %) result)
+                                      #_(maybe-store-in-db (:db params) processor result)
+                                      (filter-contexts result options))
+                             with-processor (filter :processor output)
+                             without-processor (remove :processor output)]
+                         (dlog "Produced" (count without-processor))
+                         (>! control-chan {:done context, :new-items with-processor}))))
+        (when-not (= context :terminate)
+          (recur))))))
+
+(def default-options
+  {:max-connections 10,
+   :parallelism 4,
+   :timeout 60000,
+   :retries 5})
+
+(defn scrape [seed & {:as options}]
+  (let [options (merge default-options options)
+        {:keys [max-connections parallelism]} options
+        client (HttpClient. max-connections)
+        sem (java.util.concurrent.Semaphore. max-connections)
+        control-chan (chan)
+        data-chan (chan)
+        terminate-chan (chan)]
+    (governor options seed control-chan data-chan terminate-chan)
+    (dotimes [i parallelism]
+      (worker options i client sem control-chan data-chan))
+    (<!! terminate-chan)
+    (close! control-chan)
+    (close! data-chan)
+    (log "run" nil "Terminated.")))
