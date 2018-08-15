@@ -98,6 +98,11 @@
     (when cache-key-fn
       (cache-key-fn context))))
 
+(defn dbgl [x]
+  (binding [*out* *err*]
+    (print x)
+    (flush)))
+
 (defn downloader [to-process url-chan body-chan
                   {:keys [max-connections retries timeout html-cache]
                    :or {max-connections 10, retries 5, timeout 60000}}]
@@ -105,59 +110,74 @@
         sem (java.util.concurrent.Semaphore. max-connections)]
     (go-loop []
       (infof "downloader: awaiting context")
-      (let [context (<! url-chan)
-            orig context
-            processor (@processors (:processor context))]
-        (when context
-          (let [ckey (cache-key processor context)
-                cached (when (and ckey (not (:updatable processor))) (cache/load-string html-cache ckey))
-                context (assoc context ::cache-key ckey)]
-            (if cached
-              (do
-                (infof "downloader: retrieved from cache: %s" (describe context))
-                (put! body-chan (assoc context ::response {:body cached} ::orig orig)))
-              (let [req (merge {:client client
-                                :timeout timeout
-                                :method :get}
-                               (cookie-headers context)
-                               (select-keys context [:url :method :form-params :headers]))
-                    handler (fn [{:keys [opts body headers status error] :as resp}]
-                              (cond
-                                error (if (instance? TimeoutException error)
-                                        (do
-                                          (warnf "downloader: %s timed out, requeuing" (describe context))
-                                          (put! url-chan context))
-                                        (let [retry (inc (or (::retry context) 0))]
-                                          (if (< retry retries)
-                                            (do
-                                              (warnf "downloader: %s: unexpected error: %s, retrying" (describe context) error)
-                                              (put! url-chan (assoc context ::retry retry)))
-                                            (do
-                                              (warnf "downloader: %s: unexpected error: %s, giving up" (describe context) error)
-                                              (put! body-chan {::error true, ::orig (dissoc orig ::retry ::cache-key)})))))
-                                (= status 200) (let [cookie (extract-cookie headers)
-                                                     context (cond-> context
-                                                               cookie (assoc ::cookie cookie))]
-                                                 (infof "downloader: downloaded %s" (describe context))
-                                                 (when ckey
-                                                   (cache/save-string html-cache ckey (:body resp)))
-                                                 (put! body-chan
+      (let [_ (dbgl "A")
+            contexts (<! url-chan)
+            _ (dbgl "a")]
+        (when contexts
+          (doseq [context contexts]
+            (let [orig context
+                  processor (@processors (:processor context))
+                  ckey (cache-key processor context)
+                  cached (when (and ckey (not (:updatable processor))) (cache/load-string html-cache ckey))
+                  context (assoc context ::cache-key ckey)]
+              (if cached
+                (do
+                  (infof "downloader: retrieved from cache: %s" (describe context))
+                  (dbgl "B")
+                  (>! body-chan (assoc context ::response {:body cached} ::orig orig))
+                  (dbgl "b"))
+                (let [req (merge {:client client
+                                  :timeout timeout
+                                  :method :get}
+                                 (cookie-headers context)
+                                 (select-keys context [:url :method :form-params :headers]))
+                      handler (fn [{:keys [opts body headers status error] :as resp}]
+                                (cond
+                                  error (if (instance? TimeoutException error)
+                                          (do
+                                            (warnf "downloader: %s timed out, requeuing" (describe context))
+                                            (>! url-chan [context]))
+                                          (let [retry (inc (or (::retry context) 0))]
+                                            (if (< retry retries)
+                                              (do
+                                                (warnf "downloader: %s: unexpected error: %s, retrying" (describe context) error)
+                                                (dbgl "C")
+                                                (>! url-chan [(assoc context ::retry retry)])
+                                                (dbgl "c"))
+                                              (do
+                                                (warnf "downloader: %s: unexpected error: %s, giving up" (describe context) error)
+                                                (dbgl "D")
+                                                (>! body-chan {::error true, ::orig (dissoc orig ::retry ::cache-key)})
+                                                (dbgl "d")))))
+                                  (= status 200) (let [cookie (extract-cookie headers)
+                                                       context (cond-> context
+                                                                 cookie (assoc ::cookie cookie))]
+                                                   (infof "downloader: downloaded %s" (describe context))
+                                                   (when ckey
+                                                     (cache/save-string html-cache ckey (:body resp)))
+                                                   (dbgl "E")
+                                                   (>! body-chan
                                                        (assoc context
                                                               ::response resp
-                                                              ::orig orig)))
-                                :otherwise (let [retry (inc (or (::retry context) 0))]
-                                             (if (< retry retries)
-                                               (do
-                                                 (warnf "downloader: %s: unexpected status: %s, retrying" (describe context) status)
-                                                 (put! url-chan (assoc context ::retry retry)))
-                                               (do
-                                                 (warnf "downloader: %s: unexpected status: %s, giving up" (describe context) status)
-                                                 (put! body-chan {::error true, ::orig (dissoc orig ::retry ::cache-key)})))))
-                              (.release sem))]
-                (infof "downloader: waiting" (describe context))
-                (.acquire sem)
-                (infof "downloader: downloading %s" (describe context))
-                (http/request req handler))))
+                                                              ::orig orig))
+                                                   (dbgl "e"))
+                                  :otherwise (let [retry (inc (or (::retry context) 0))]
+                                               (if (< retry retries)
+                                                 (do
+                                                   (warnf "downloader: %s: unexpected status: %s, retrying" (describe context) status)
+                                                   (dbgl "F")
+                                                   (>! url-chan [(assoc context ::retry retry)])
+                                                   (dbgl "f"))
+                                                 (do
+                                                   (warnf "downloader: %s: unexpected status: %s, giving up" (describe context) status)
+                                                   (dbgl "G")
+                                                   (>! body-chan {::error true, ::orig (dissoc orig ::retry ::cache-key)})
+                                                   (dbgl "g")))))
+                                (.release sem))]
+                  (infof "downloader: waiting" (describe context))
+                  (.acquire sem)
+                  (infof "downloader: downloading %s" (describe context))
+                  (http/request req handler)))))
           (recur))))))
 
 (defn merge-contexts [old new]
@@ -182,7 +202,9 @@
 (defn grinder [to-process url-chan body-chan output-chan params]
   (go-loop []
     (infof "grinder: awaiting context, first to process: %s" (pr-str (first @to-process)))
+    (dbgl "H")
     (when-let [context (<! body-chan)]
+      (dbgl "h")
       (infof "grinder: grinding %s" (describe context))
       (let [new-items (when-not (::error context)
                         (let [document (reaver/parse (get-in context [::response :body]))
@@ -202,10 +224,25 @@
                                  (disj (::orig context))
                                  (into (filter :processor new-items))))]
         (infof "grinder: Outputting %s (%s/%s) items for %s" (count new-items) (count (filter :processor new-items)) (count (remove :processor new-items)) (describe context))
-        (doseq [item new-items]
-          (if (:processor item)
-            (>! url-chan item)
-            (>! output-chan (dissoc-internal item))))
+        (let [with-processor (filter :processor new-items)
+              without-processor (remove :processor new-items)]
+          (dbgl "I")
+          (>! url-chan with-processor)
+          (dbgl "i")
+          (dbgl "J")
+          (>! output-chan (map dissoc-internal without-processor))
+          (dbgl "j")
+          #_
+          (doseq [item new-items]
+            (if (:processor item)
+              (do
+                (dbgl "I")
+                (>! url-chan item)
+                (dbgl "i"))
+              (do
+                (dbgl "J")
+                (>! output-chan (dissoc-internal item))
+                (dbgl "j")))))
         (if (seq new-atom)
           (recur)
           (do
@@ -214,12 +251,15 @@
             (close! output-chan)))))))
 
 (defn initialize [seed input-chan]
-  (doseq [item seed]
-    (>!! input-chan item)))
+  (dbgl "K")
+  (>!! input-chan seed)
+  (dbgl "k"))
+
+(def lifo-buffer-size 1)
 
 (defn scrape [seed & {:as params}]
-  (let [input-chan (chan)
-        body-chan (chan (lifo-buffer 10000))
+  (let [input-chan (chan (lifo-buffer lifo-buffer-size))
+        body-chan (chan)
         output-chan (chan)
         seed (filter-contexts seed params)
         to-process (atom (set seed))]
@@ -227,10 +267,13 @@
     (grinder to-process input-chan body-chan output-chan params)
     (initialize seed input-chan)
     (with-open [f (io/writer "output.dat")]
+      (dbgl "L")
       (loop [x (<!! output-chan)]
+        (dbgl "m")
         (when x
           #_(binding [*out* f]
-            (prn x))
+              (prn x))
+          (dbgl "M")
           (recur (<!! output-chan)))))
     nil))
 
@@ -249,6 +292,7 @@
                               (map (comp str row-data) keyseq))
                             data)))))
 
+#_
 (timbre/merge-config!
  {:appenders {:println {:enabled? false},
               :spit (appenders/spit-appender {:fname "skyscraper-next.log"})}})

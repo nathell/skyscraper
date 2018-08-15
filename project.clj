@@ -7,6 +7,7 @@
                  [org.clojure/core.incubator "0.1.4"]
                  [org.clojure/data.csv "0.1.4"]
                  [org.clojure/java.jdbc "0.7.6"]
+                 [clj-http "3.9.1"]
                  [http-kit "2.3.0"]
                  [reaver "0.1.2"]
                  [com.taoensso/timbre "4.10.0"]
