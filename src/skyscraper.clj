@@ -1,11 +1,13 @@
 (ns skyscraper
   (:require
+    [clj-http.client :as http]
+    [clj-http.conn-mgr :as http-conn]
+    [clj-http.core :as http-core]
     [clojure.core.async :as async
      :refer [<! <!! >! >!! alts! alts!!
              chan close! go go-loop put!]]
     [clojure.set :refer [intersection]]
     [clojure.string :as string]
-    [org.httpkit.client :as http]
     [reaver])
   (:import [java.net URL]
            [org.httpkit.client HttpClient TimeoutException]))
@@ -148,41 +150,32 @@
 (defn describe [ctx]
   (:url ctx))
 
-(defn download [{:keys [timeout retries]}
-                client sem context control-chan]
+(defn download [options sem cm context control-chan]
   (let [orig context
         dlog (partial log "download" nil)
-        req (merge {:client client
-                    :timeout timeout
-                    :method :get}
-                   (select-keys context [:url :method :form-params]))
-        send-retry (fn [error]
-                     (let [retry (inc (or (::retry context) 0))]
-                       (if (< retry retries)
-                         (do
-                           (dlog "Unexpected error - retry" retry error "context:" context)
-                           (>!! control-chan (processed orig (assoc context ::retry retry))))
-                         (do
-                           (dlog "Unexpected error - giving up" error "context:" context)
-                           (>!! control-chan (processed orig {::error error, ::context context}))))))
-        handler (fn [{:keys [opts body headers status error] :as resp}]
-                        (cond
-                          error (if (instance? TimeoutException error)
-                                  (do
-                                    (dlog "Timeout:" context)
-                                    (>!! control-chan (processed orig context)))
-                                  (send-retry error))
-                          (= status 200) (do
-                                           (dlog "downloaded" (describe context))
-                                           #_(when ckey
-                                             (cache/save-string html-cache ckey (:body resp)))
-                                           (>!! control-chan (processed orig (assoc context ::response resp))))
-                          :otherwise (send-retry {:status status}))
-                        (.release sem))]
-          (dlog "waiting")
-          (.acquire sem)
-          (dlog "downloading" (describe context))
-          (http/request req handler)))
+        req (merge {:method :get}
+                   (select-keys context [:url]))
+        success-fn (fn [resp]
+                     (dlog "downloaded" (describe context))
+                     (>!! control-chan (processed orig (assoc context ::response resp)))
+                     (.release sem))
+        error-fn (fn [error]
+                   (let [retry (inc (or (::retry context) 0))]
+                     (if (< retry (:retries options))
+                       (do
+                         (dlog "Unexpected error - retry" retry error "context:" context)
+                         (>!! control-chan (processed orig (assoc context ::retry retry))))
+                       (do
+                         (dlog "Unexpected error - giving up" error "context:" context)
+                         (>!! control-chan (processed orig {::error error, ::context context})))))
+                   (.release sem))]
+    (dlog "waiting")
+    (.acquire sem)
+    (dlog "downloading" (describe context))
+    (http/request (merge {:async? true, :connection-manager cm}
+                         req (:http-options options))
+                  success-fn
+                  error-fn)))
 
 (defn process [{:keys [number] :as job}]
   (let [new-items (when (< number 100)
@@ -190,7 +183,7 @@
                       {:number (+ (* number 10) i)}))]
     {:done job, :new-items new-items}))
 
-(defn worker [options i client sem control-chan data-chan]
+(defn worker [options i sem cm control-chan data-chan]
   (let [dlog (partial log "worker" i)]
     (go-loop []
       (dlog "Sending gimme")
@@ -200,7 +193,7 @@
         (cond
           (= context :terminate) (dlog "Terminating")
           (::error context) (dlog "Got error:" (::error context))
-          (not (::response context)) (download options client sem context control-chan)
+          (not (::response context)) (download options sem cm context control-chan)
           :otherwise (do
                        (let [document (reaver/parse (get-in context [::response :body]))
                              processor (@processors (:processor context))
@@ -225,19 +218,21 @@
   {:max-connections 10,
    :parallelism 4,
    :timeout 60000,
-   :retries 5})
+   :retries 5,
+   :conn-mgr-options {},
+   :http-options {}})
 
 (defn scrape [seed & {:as options}]
   (let [options (merge default-options options)
+        cm (http-conn/make-reuseable-async-conn-manager (:conn-mgr-options options))
         {:keys [max-connections parallelism]} options
-        client (HttpClient. max-connections)
         sem (java.util.concurrent.Semaphore. max-connections)
         control-chan (chan)
         data-chan (chan)
         terminate-chan (chan)]
     (governor options seed control-chan data-chan terminate-chan)
     (dotimes [i parallelism]
-      (worker options i client sem control-chan data-chan))
+      (worker options i sem cm control-chan data-chan))
     (<!! terminate-chan)
     (close! control-chan)
     (close! data-chan)
