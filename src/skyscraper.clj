@@ -8,9 +8,35 @@
              chan close! go go-loop put!]]
     [clojure.set :refer [intersection]]
     [clojure.string :as string]
-    [reaver])
+    [reaver]
+    [skyscraper.cache :as cache]
+    [skyscraper.sqlite :as sqlite])
   (:import [java.net URL]
            [org.httpkit.client HttpClient TimeoutException]))
+
+;;; Micro-templating framework
+
+(defn format-template
+  "Fills in a template string with moving parts from m. template should be
+   a string containing 'variable names' starting with colons; these names
+   are extracted, converted to keywords and looked up in m, which should be
+   a map (or a function taking keywords and returning strings).
+
+   Example:
+   (format-template \":group/:user/index\" {:user \"joe\", :group \"admins\"})
+   ;=> \"admins/joe/index\" "
+  [template m]
+  (let [re #":[a-z-]+"
+        keys (map #(keyword (subs % 1)) (re-seq re template))
+        fmt (string/replace template re "%s")]
+    (apply format fmt (map m keys))))
+
+(defn cache-key [{:keys [cache-template cache-key-fn]} context]
+  (let [cache-key-fn (or cache-key-fn
+                         (when cache-template
+                           (partial format-template cache-template)))]
+    (when cache-key-fn
+      (cache-key-fn context))))
 
 (defonce processors (atom {}))
 
@@ -68,6 +94,16 @@
               (assoc new :url new-url)
               new)]
     (merge preserve new)))
+
+(defn separate [f s]
+  [(filter f s) (filter (complement f) s)])
+
+(defn maybe-store-in-db [db {:keys [name db-columns id] :as q} contexts]
+  (if (and db db-columns)
+    (let [[skipped inserted] (separate ::db-skip contexts)
+          new-items (sqlite/insert-all! db name id db-columns inserted)]
+      (into (vec skipped) new-items))
+    contexts))
 
 (defn gimme [{:keys [todo doing] :as s}]
   (if-let [popped (first todo)]
@@ -154,11 +190,14 @@
   (let [orig context
         dlog (partial log "download" nil)
         req (merge {:method :get}
-                   (select-keys context [:url]))
+                   (select-keys context [:method :form-params :url]))
         success-fn (fn [resp]
                      (dlog "downloaded" (describe context))
-                     (>!! control-chan (processed orig (assoc context ::response resp)))
-                     (.release sem))
+                     (let [result (cond-> context
+                                    true (assoc ::response resp)
+                                    (:cookies resp) (update :http/cookies merge (:cookies resp)))]
+                       (>!! control-chan (processed orig result))
+                       (.release sem)))
         error-fn (fn [error]
                    (let [retry (inc (or (::retry context) 0))]
                      (if (< retry (:retries options))
@@ -172,10 +211,15 @@
     (dlog "waiting")
     (.acquire sem)
     (dlog "downloading" (describe context))
-    (http/request (merge {:async? true, :connection-manager cm}
-                         req (:http-options options))
-                  success-fn
-                  error-fn)))
+    (let [req (merge {:async? true,
+                      :connection-manager cm}
+                     (when-let [cookies (:http/cookies context)]
+                       {:cookies cookies})
+                     req (:http-options options))]
+      (dlog "Request:" req)
+      (http/request req
+       success-fn
+       error-fn))))
 
 (defn process [{:keys [number] :as job}]
   (let [new-items (when (< number 100)
@@ -189,23 +233,31 @@
       (dlog "Sending gimme")
       (>! control-chan :gimme)
       (dlog "Waiting for reply")
-      (let [context (<! data-chan)]
+      (let [context (<! data-chan)
+            processor (@processors (:processor context))]
         (cond
           (= context :terminate) (dlog "Terminating")
           (::error context) (dlog "Got error:" (::error context))
-          (not (::response context)) (download options sem cm context control-chan)
+          (not (::response context)) (let [ckey (cache-key processor context)
+                                           cached (when (and ckey (not (:updatable processor)))
+                                                    (cache/load-string (:html-cache options) ckey))]
+                                       (when cached
+                                         (dlog "Retrieved from cache:" (describe context)))
+                                       (if cached
+                                         (>! control-chan (processed context (assoc context ::response {:body cached})))
+                                         (download options sem cm context control-chan)))
           :otherwise (do
+                       (dlog "Processor:" (:processor context))
                        (let [document (reaver/parse (get-in context [::response :body]))
-                             processor (@processors (:processor context))
                              output (as-> (try
                                             (-> document
                                                 ((:process-fn processor) context)
                                                 ensure-seq)
                                             (catch Exception e
-                                              (dlog "processor threw error: %s" (:processor context) (describe context))
+                                              (dlog "Processor threw error" (str e) (describe context))
                                               [])) result
                                       (map #(merge-contexts context %) result)
-                                      #_(maybe-store-in-db (:db params) processor result)
+                                      (maybe-store-in-db (:db options) processor result)
                                       (filter-contexts result options))
                              with-processor (filter :processor output)
                              without-processor (remove :processor output)]
@@ -220,7 +272,7 @@
    :timeout 60000,
    :retries 5,
    :conn-mgr-options {},
-   :http-options {}})
+   :http-options {:redirect-strategy :lax, :as :auto}})
 
 (defn scrape [seed & {:as options}]
   (let [options (merge default-options options)

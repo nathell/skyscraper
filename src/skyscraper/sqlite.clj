@@ -1,6 +1,6 @@
 (ns skyscraper.sqlite
-  (:require [clojure.java.jdbc :as jdbc]
-            [clojure.core.strint :refer [<<]]
+  (:require [clojure.core.strint :refer [<<]]
+            [clojure.java.jdbc :as jdbc]
             [clojure.string :as string]
             [taoensso.timbre :refer [infof]]))
 
@@ -45,8 +45,9 @@
         existing-ids (when id (set (map #(select-keys % id) existing)))
         new-contexts (remove #(contains? existing-ids (select-keys % id)) ctxs)
         to-insert (map (partial db-row columns) new-contexts)
+        mutex (Object.)
         try-inserting (fn []
-                        (let [ids (map rowid (jdbc/insert-multi! db name to-insert))]
+                        (let [ids (map rowid (locking mutex (jdbc/insert-multi! db name to-insert)))]
                           (mapv #(assoc %1 :parent %2) new-contexts ids)))]
     (infof "sqlite: got %s, existing %s, inserting %s" (count ctxs) (count existing-ids) (count to-insert))
     (try
