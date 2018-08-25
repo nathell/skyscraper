@@ -10,7 +10,8 @@
     [clojure.string :as string]
     [reaver]
     [skyscraper.cache :as cache]
-    [skyscraper.sqlite :as sqlite])
+    [skyscraper.sqlite :as sqlite]
+    [taoensso.timbre :refer [debugf warnf errorf]])
   (:import [java.net URL]
            [org.httpkit.client HttpClient TimeoutException]))
 
@@ -113,13 +114,11 @@
     [nil s]))
 
 (let [x (Object.)]
-  (defn log [who i & items]
-    (locking x
-      (if i
-        (print (str "[" who " " i "] "))
-        (print (str "[" who "] ")))
-      (apply println items)
-      (flush))))
+  (defn printff [& args]
+    (let [s (apply format args)]
+      (locking x
+        (print s)
+        (flush)))))
 
 (defn done [{:keys [todo doing] :as s}
             {:keys [done new-items]}
@@ -149,10 +148,10 @@
   (go-loop [state (initial-state seed)
             want 0
             terminating nil]
-    (let [dlog (partial log "governor" nil)
-          _ (dlog "Waiting for message" (count (:todo state)) (count (:doing state)) want)
-          message (<! control-chan)]
-      (dlog (if (= message :gimme) "Got gimme" "Got message"))
+    (debugf "[governor] Waiting for message")
+    (printff "%10d/%-10d\r" (count (:todo state)) (count (:doing state)))
+    (let [message (<! control-chan)]
+      (debugf "[governor] Got %s" (if (= message :gimme) "gimme" "message"))
       (cond
         terminating (when (pos? terminating)
                       (>! data-chan :terminate)
@@ -160,7 +159,7 @@
                         (close! terminate-chan)
                         (recur state want (dec terminating))))
         (= message :gimme) (let [[res state] (gimme state)]
-                             (dlog "Giving" (keys res))
+                             (debugf "[governor] Giving")
                              (if res
                                (do
                                  (>! data-chan res)
@@ -170,101 +169,96 @@
                          (done state message want)]
                      (cond
                        unexpected (do
-                                    (dlog "Unexpected:" message)
+                                    (errorf "[governor] Unexpected message:" message)
                                     (recur state want nil))
                        terminate (do
-                                   (dlog "Entering termination mode")
+                                   (debugf "[governor] Entering termination mode")
                                    (dotimes [i want]
                                      (>! data-chan :terminate))
                                    (recur state want (- parallelism want)))
                        :else (do
-                               (dlog "Giving away:" (mapv keys giveaway))
+                               (debugf "[governor] Giving away: %d" (count giveaway))
                                (doseq [item giveaway]
                                  (>! data-chan item))
                                (recur state want nil))))))))
 
 (defn describe [ctx]
-  (:url ctx))
+  (cond->
+      (:url ctx)
+    (:http/cookies ctx) (str " cookies: " (pr-str (:http/cookies ctx)))
+    (:form-params ctx) (str " form-params: " (pr-str (:form-params ctx)))))
 
-(defn download [options sem cm context control-chan]
+(defn download [options sem cm ckey context control-chan]
   (let [orig context
-        dlog (partial log "download" nil)
         req (merge {:method :get}
                    (select-keys context [:method :form-params :url]))
         success-fn (fn [resp]
-                     (dlog "downloaded" (describe context))
+                     (debugf "[download] Downloaded %s" (describe context))
                      (let [result (cond-> context
                                     true (assoc ::response resp)
                                     (:cookies resp) (update :http/cookies merge (:cookies resp)))]
+                       (when ckey
+                         (cache/save-string (:html-cache options) ckey (:body resp)))
                        (>!! control-chan (processed orig result))
                        (.release sem)))
         error-fn (fn [error]
                    (let [retry (inc (or (::retry context) 0))]
                      (if (< retry (:retries options))
                        (do
-                         (dlog "Unexpected error - retry" retry error "context:" context)
+                         (warnf "[download] Unexpected error %s, retry %s, context %s" error retry context)
                          (>!! control-chan (processed orig (assoc context ::retry retry))))
                        (do
-                         (dlog "Unexpected error - giving up" error "context:" context)
+                         (warnf "[download] Unexpected error %s, giving up, context %s" error context)
                          (>!! control-chan (processed orig {::error error, ::context context})))))
                    (.release sem))]
-    (dlog "waiting")
+    (debugf "[download] Waiting")
     (.acquire sem)
-    (dlog "downloading" (describe context))
+    (debugf "[download] Downloading %s" (describe context))
     (let [req (merge {:async? true,
                       :connection-manager cm}
                      (when-let [cookies (:http/cookies context)]
                        {:cookies cookies})
                      req (:http-options options))]
-      (dlog "Request:" req)
       (http/request req
        success-fn
        error-fn))))
 
-(defn process [{:keys [number] :as job}]
-  (let [new-items (when (< number 100)
-                    (for [i (range 1 4)]
-                      {:number (+ (* number 10) i)}))]
-    {:done job, :new-items new-items}))
-
 (defn worker [options i sem cm control-chan data-chan]
-  (let [dlog (partial log "worker" i)]
-    (go-loop []
-      (dlog "Sending gimme")
-      (>! control-chan :gimme)
-      (dlog "Waiting for reply")
-      (let [context (<! data-chan)
-            processor (@processors (:processor context))]
-        (cond
-          (= context :terminate) (dlog "Terminating")
-          (::error context) (dlog "Got error:" (::error context))
-          (not (::response context)) (let [ckey (cache-key processor context)
-                                           cached (when (and ckey (not (:updatable processor)))
-                                                    (cache/load-string (:html-cache options) ckey))]
-                                       (when cached
-                                         (dlog "Retrieved from cache:" (describe context)))
-                                       (if cached
-                                         (>! control-chan (processed context (assoc context ::response {:body cached})))
-                                         (download options sem cm context control-chan)))
-          :otherwise (do
-                       (dlog "Processor:" (:processor context))
-                       (let [document (reaver/parse (get-in context [::response :body]))
-                             output (as-> (try
-                                            (-> document
-                                                ((:process-fn processor) context)
-                                                ensure-seq)
-                                            (catch Exception e
-                                              (dlog "Processor threw error" (str e) (describe context))
-                                              [])) result
-                                      (map #(merge-contexts context %) result)
-                                      (maybe-store-in-db (:db options) processor result)
-                                      (filter-contexts result options))
-                             with-processor (filter :processor output)
-                             without-processor (remove :processor output)]
-                         (dlog "Produced" (count without-processor))
-                         (>! control-chan {:done context, :new-items with-processor}))))
-        (when-not (= context :terminate)
-          (recur))))))
+  (go-loop []
+    (debugf "[worker %d] Sending gimme" i)
+    (>! control-chan :gimme)
+    (debugf "[worker %d] Waiting for reply" i)
+    (let [context (<! data-chan)
+          processor (@processors (:processor context))]
+      (cond
+        (= context :terminate) (debugf "[worker %d] Terminating" i)
+        (::error context) (debugf "[worker %d] Got error: %s" i (::error context))
+        (not (::response context)) (let [ckey (cache-key processor context)
+                                         cached (when (and ckey (not (:updatable processor)))
+                                                  (cache/load-string (:html-cache options) ckey))]
+                                     (when cached
+                                       (debugf "[worker %d] Retrieved from cache: %s" i (describe context)))
+                                     (if cached
+                                       (>! control-chan (processed context (assoc context ::response {:body cached})))
+                                       (download options sem cm ckey context control-chan)))
+        :otherwise (do
+                     (let [document (reaver/parse (get-in context [::response :body]))
+                           output (as-> (try
+                                          (-> document
+                                              ((:process-fn processor) context)
+                                              ensure-seq)
+                                          (catch Exception e
+                                            (warnf e "[worker %d] Processor threw error for %s" i (describe context))
+                                            [])) result
+                                    (map #(merge-contexts context %) result)
+                                    (maybe-store-in-db (:db options) processor result)
+                                    (filter-contexts result options))
+                           with-processor (filter :processor output)
+                           without-processor (remove :processor output)]
+                       (debugf "[worker %d] Produced" i (count without-processor))
+                       (>! control-chan {:done context, :new-items with-processor}))))
+      (when-not (= context :terminate)
+        (recur)))))
 
 (def default-options
   {:max-connections 10,
@@ -288,4 +282,4 @@
     (<!! terminate-chan)
     (close! control-chan)
     (close! data-chan)
-    (log "run" nil "Terminated.")))
+    (debugf "Scrape complete.")))

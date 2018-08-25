@@ -2,7 +2,7 @@
   (:require [clojure.core.strint :refer [<<]]
             [clojure.java.jdbc :as jdbc]
             [clojure.string :as string]
-            [taoensso.timbre :refer [infof]]))
+            [taoensso.timbre :refer [debugf]]))
 
 (defn db-column-name [col]
   (string/replace (name col) "-" "_"))
@@ -49,7 +49,7 @@
         try-inserting (fn []
                         (let [ids (map rowid (locking mutex (jdbc/insert-multi! db name to-insert)))]
                           (mapv #(assoc %1 :parent %2) new-contexts ids)))]
-    (infof "sqlite: got %s, existing %s, inserting %s" (count ctxs) (count existing-ids) (count to-insert))
+    (debugf "[sqlite] Got %s, existing %s, inserting %s" (count ctxs) (count existing-ids) (count to-insert))
     (try
       (try-inserting)
       (catch org.sqlite.SQLiteException e
