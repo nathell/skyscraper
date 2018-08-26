@@ -248,7 +248,7 @@
                                               ((:process-fn processor) context)
                                               ensure-seq)
                                           (catch Exception e
-                                            (warnf e "[worker %d] Processor threw error for %s" i (describe context))
+                                            (warnf e "[worker %d] Processor threw error for %s" i (pr-str context))
                                             [])) result
                                     (map #(merge-contexts context %) result)
                                     (maybe-store-in-db (:db options) processor result)
