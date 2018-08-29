@@ -6,6 +6,7 @@
                  [org.clojure/core.async "0.4.474"]
                  [org.clojure/core.incubator "0.1.4"]
                  [org.clojure/data.csv "0.1.4"]
+                 [org.clojure/data.priority-map "0.0.10"]
                  [org.clojure/java.jdbc "0.7.6"]
                  [clj-http "3.9.1"]
                  [http-kit "2.3.0"]
