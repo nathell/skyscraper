@@ -26,7 +26,7 @@
 
 (deftest test-process-as-seq
   (timbre/set-level! :info)
-  (doseq [p [#_1 4 #_16 #_128] #_[1 4 16 128]]
+  (doseq [p [1 4 16 128]]
     (testing (str "parallelism " p)
       (testing "synchronous calls"
         (let [items (async/process-as-seq [{:number 0, :skyscraper/processor xform, :skyscraper/call-protocol :sync}] {:parallelism p})

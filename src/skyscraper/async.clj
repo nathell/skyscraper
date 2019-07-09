@@ -2,7 +2,7 @@
   (:require
     [clojure.core.async :as async
      :refer [<! <!! >! >!! alts! alts!!
-             chan close! go go-loop put!]]
+             chan close! go go-loop put! thread]]
     [clojure.data.priority-map :refer [priority-map]]
     [clojure.spec.alpha :as spec]
     [skyscraper.data :refer [separate]]
@@ -105,28 +105,29 @@
 
 (defn worker [options i control-chan data-chan leaf-chan]
   (let [options (assoc options :skyscraper/worker i)]
-    (go-loop []
-      (debugf "[worker %d] Sending gimme" i)
-      (>! control-chan :gimme)
-      (debugf "[worker %d] Waiting for reply" i)
-      (let [{:keys [:skyscraper/terminate :skyscraper/processor :skyscraper/call-protocol] :as context} (<! data-chan)]
-        (if terminate
-          (debugf "[worker %d] Terminating" i)
-          (do
-            (case call-protocol
-              :sync (let [new-contexts (processor context)
-                          [non-leaves leaves] (separate :skyscraper/processor new-contexts)]
-                      (debugf "[worker %d] %d leaves, %d inner nodes produced" i (count leaves) (count non-leaves))
-                      (when (and leaf-chan (seq leaves))
-                        (>! leaf-chan leaves))
-                      (>! control-chan (processed context non-leaves)))
-              :callback (processor context (fn [new-contexts]
-                                             (let [[non-leaves leaves] (separate :skyscraper/processor new-contexts)]
-                                               (debugf "[worker %d] %d leaves, %d inner nodes produced" i (count leaves) (count non-leaves))
-                                               (when (and leaf-chan (seq leaves))
-                                                 (>!! leaf-chan leaves))
-                                               (>!! control-chan (processed context non-leaves))))))
-            (recur)))))))
+    (thread
+      (loop []
+        (debugf "[worker %d] Sending gimme" i)
+        (>!! control-chan :gimme)
+        (debugf "[worker %d] Waiting for reply" i)
+        (let [{:keys [:skyscraper/terminate :skyscraper/processor :skyscraper/call-protocol] :as context} (<!! data-chan)]
+          (if terminate
+            (debugf "[worker %d] Terminating" i)
+            (do
+              (case call-protocol
+                :sync (let [new-contexts (processor context)
+                            [non-leaves leaves] (separate :skyscraper/processor new-contexts)]
+                        (debugf "[worker %d] %d leaves, %d inner nodes produced" i (count leaves) (count non-leaves))
+                        (when (and leaf-chan (seq leaves))
+                          (>!! leaf-chan leaves))
+                        (>!! control-chan (processed context non-leaves)))
+                :callback (processor context (fn [new-contexts]
+                                               (let [[non-leaves leaves] (separate :skyscraper/processor new-contexts)]
+                                                 (debugf "[worker %d] %d leaves, %d inner nodes produced" i (count leaves) (count non-leaves))
+                                                 (when (and leaf-chan (seq leaves))
+                                                   (>!! leaf-chan leaves))
+                                                 (>!! control-chan (processed context non-leaves))))))
+              (recur))))))))
 
 (def default-options
   {:prioritize? false
