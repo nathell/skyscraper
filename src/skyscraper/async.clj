@@ -140,8 +140,35 @@
     (governor options seed control-chan data-chan terminate-chan)
     (dotimes [i parallelism]
       (worker options i control-chan data-chan leaf-chan))
-    (<!! terminate-chan)
-    (close! control-chan)
-    (close! data-chan)
-    (when leaf-chan
-      (close! leaf-chan))))
+    {:control-chan control-chan
+     :data-chan data-chan
+     :terminate-chan terminate-chan
+     :leaf-chan leaf-chan}))
+
+(defn wait! [{:keys [terminate-chan]}]
+  (<!! terminate-chan))
+
+(defn close-all! [{:keys [control-chan data-chan leaf-chan]}]
+  (close! control-chan)
+  (close! data-chan)
+  (when leaf-chan
+    (close! leaf-chan))
+  nil)
+
+(defn process! [seed options]
+  (let [channels (launch seed options)]
+    (wait! channels)
+    (close-all! channels)))
+
+(defn chan->seq [ch channels]
+  (lazy-seq
+   (let [[items _] (alts!! [ch (:terminate-chan channels)])]
+     (if items
+       (concat items (chan->seq ch channels))
+       (close-all! channels)))))
+
+(defn process-as-seq [seed options]
+  (let [leaf-chan (chan)
+        options (assoc options :leaf-chan leaf-chan)
+        channels (launch seed options)]
+    (chan->seq leaf-chan channels)))
