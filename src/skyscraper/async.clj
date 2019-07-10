@@ -36,7 +36,6 @@
         (flush)))))
 
 (defn gimme [{:keys [todo doing] :as s}]
-  #_(prn "Gimme:" (desc todo) (desc doing))
   (if-let [popped (first todo)]
     (let [popped (if (map? todo) (key popped) popped)]
       [popped
@@ -63,7 +62,7 @@
        :terminate (and (empty? doing) (empty? new-todo))
        :state {:todo new-todo, :doing doing}})))
 
-(defn governor [{:keys [prioritize? parallelism]} seed control-chan data-chan terminate-chan]
+(defn governor [{:keys [prioritize? parallelism]} seed {:keys [control-chan data-chan terminate-chan]}]
   (go-loop [state (initial-state prioritize? seed)
             want 0
             terminating nil]
@@ -104,7 +103,16 @@
 (defn processed [context results]
   {:done context, :new-items results})
 
-(defn worker [options i control-chan data-chan leaf-chan]
+(defn- propagate-new-contexts [{:keys [item-chan leaf-chan control-chan]} i context new-contexts]
+  (let [[non-leaves leaves] (separate :skyscraper/processor new-contexts)]
+    (debugf "[worker %d] %d leaves, %d inner nodes produced" i (count leaves) (count non-leaves))
+    (when (and item-chan (seq new-contexts))
+      (>!! item-chan new-contexts))
+    (when (and leaf-chan (seq leaves))
+      (>!! leaf-chan leaves))
+    (>!! control-chan (processed context non-leaves))))
+
+(defn worker [options i {:keys [control-chan data-chan] :as channels}]
   (let [options (assoc options :skyscraper/worker i)]
     (thread
       (loop []
@@ -116,18 +124,8 @@
             (debugf "[worker %d] Terminating" i)
             (do
               (case call-protocol
-                :sync (let [new-contexts (processor context)
-                            [non-leaves leaves] (separate :skyscraper/processor new-contexts)]
-                        (debugf "[worker %d] %d leaves, %d inner nodes produced" i (count leaves) (count non-leaves))
-                        (when (and leaf-chan (seq leaves))
-                          (>!! leaf-chan leaves))
-                        (>!! control-chan (processed context non-leaves)))
-                :callback (processor context (fn [new-contexts]
-                                               (let [[non-leaves leaves] (separate :skyscraper/processor new-contexts)]
-                                                 (debugf "[worker %d] %d leaves, %d inner nodes produced" i (count leaves) (count non-leaves))
-                                                 (when (and leaf-chan (seq leaves))
-                                                   (>!! leaf-chan leaves))
-                                                 (>!! control-chan (processed context non-leaves))))))
+                :sync (propagate-new-contexts channels i context (processor context))
+                :callback (processor context (partial propagate-new-contexts channels i context)))
               (recur))))))))
 
 (def default-options
@@ -135,26 +133,27 @@
    :parallelism 4})
 
 (defn launch [seed options]
-  (let [{:keys [parallelism leaf-chan] :as options} (merge default-options options)
-        control-chan (chan)
-        data-chan (chan)
-        terminate-chan (chan)]
-    (governor options seed control-chan data-chan terminate-chan)
+  (let [{:keys [parallelism leaf-chan item-chan] :as options} (merge default-options options)
+        channels {:control-chan (chan)
+                  :data-chan (chan)
+                  :terminate-chan (chan)
+                  :leaf-chan leaf-chan
+                  :item-chan item-chan}]
+    (governor options seed channels)
     (dotimes [i parallelism]
-      (worker options i control-chan data-chan leaf-chan))
-    {:control-chan control-chan
-     :data-chan data-chan
-     :terminate-chan terminate-chan
-     :leaf-chan leaf-chan}))
+      (worker options i channels))
+    channels))
 
 (defn wait! [{:keys [terminate-chan]}]
   (<!! terminate-chan))
 
-(defn close-all! [{:keys [control-chan data-chan leaf-chan]}]
+(defn close-all! [{:keys [control-chan data-chan leaf-chan item-chan]}]
   (close! control-chan)
   (close! data-chan)
   (when leaf-chan
     (close! leaf-chan))
+  (when item-chan
+    (close! item-chan))
   nil)
 
 (defn process! [seed options]
