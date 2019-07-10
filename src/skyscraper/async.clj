@@ -45,9 +45,10 @@
     [nil s]))
 
 (defn pop-n [n todo]
-  (if-not (map? todo)
-    [(take n todo) (nth (iterate #(if (empty? %) % (pop %)) todo) n)]
-    [(map key (take n todo)) (nth (iterate pop todo) n)]))
+  (let [pop' #(if (empty? %) % (pop %))]
+    (if-not (map? todo)
+      [(take n todo) (nth (iterate pop' todo) n)]
+      [(map key (take n todo)) (nth (iterate pop' todo) n)])))
 
 (defn done [{:keys [todo doing] :as s}
             {:keys [done new-items]}

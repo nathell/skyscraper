@@ -7,9 +7,9 @@
 (defn xform [next-fn {:keys [number]}]
   (filter (comp pos? :number)
           (map #(let [n (+ (* 10 number) %)]
-                  (merge {:number n}
+                  (merge {:number n, :skyscraper/priority (- n)}
                          (when (< n 100)
-                           (next-fn) )))
+                           (next-fn))))
                (range 10))))
 
 (defn xform-sync [context]
@@ -45,3 +45,9 @@
           (let [items (async/process-as-seq [{:number 0, :skyscraper/processor processor, :skyscraper/call-protocol protocol}] {:parallelism p})
                 numbers (map :number items)]
             (is (= (sort numbers) (range 100 1000)))))))))
+
+(deftest test-priority
+  (let [items (async/process-as-seq [{:number 0, :skyscraper/processor xform-sync, :skyscraper/call-protocol :sync}]
+                                    {:parallelism 1, :prioritize? true})
+        numbers (map :number items)]
+    (is (= numbers (for [x (range 99 9 -1) y (range 10)] (+ (* 10 x) y))))))
