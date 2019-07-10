@@ -4,35 +4,44 @@
     [skyscraper.async :as async]
     [taoensso.timbre :as timbre]))
 
-(defn xform [{:keys [number]}]
+(defn xform [next-fn {:keys [number]}]
   (filter (comp pos? :number)
           (map #(let [n (+ (* 10 number) %)]
                   (merge {:number n}
                          (when (< n 100)
-                           {:skyscraper/processor xform, :skyscraper/call-protocol :sync})))
+                           (next-fn) )))
                (range 10))))
+
+(defn xform-sync [context]
+  (xform (constantly {:skyscraper/processor xform-sync, :skyscraper/call-protocol :sync}) context))
 
 (defn xform-async [context on-done]
   (Thread/sleep (rand-int 1000))
-  (on-done (map #(if (:skyscraper/processor %)
-                   (assoc %
-                          :skyscraper/processor xform-async
-                          :skyscraper/call-protocol :callback)
-                   %)
-                (xform context))))
+  (on-done (xform (constantly {:skyscraper/processor xform-async, :skyscraper/call-protocol :callback}) context)))
+
+(declare xform-async-random)
+
+(defn xform-sync-random [context]
+  (xform #(rand-nth [{:skyscraper/processor xform-sync-random, :skyscraper/call-protocol :sync}
+                     {:skyscraper/processor xform-async-random, :skyscraper/call-protocol :callback}])
+         context))
+
+(defn xform-async-random [context on-done]
+  (Thread/sleep (rand-int 1000))
+  (on-done
+   (xform #(rand-nth [{:skyscraper/processor xform-sync-random, :skyscraper/call-protocol :sync}
+                      {:skyscraper/processor xform-async-random, :skyscraper/call-protocol :callback}])
+          context)))
 
 (deftest test-process
-  (async/process! [{:number 0, :skyscraper/processor xform, :skyscraper/call-protocol :sync}] {}))
+  (async/process! [{:number 0, :skyscraper/processor xform-sync, :skyscraper/call-protocol :sync}] {}))
 
 (deftest test-process-as-seq
   (timbre/set-level! :info)
   (doseq [p [1 4 16 128]]
     (testing (str "parallelism " p)
-      (testing "synchronous calls"
-        (let [items (async/process-as-seq [{:number 0, :skyscraper/processor xform, :skyscraper/call-protocol :sync}] {:parallelism p})
-              numbers (map :number items)]
-          (is (= (sort numbers) (range 100 1000)))))
-      (testing "async calls"
-        (let [items (async/process-as-seq [{:number 0, :skyscraper/processor xform-async, :skyscraper/call-protocol :callback}] {:parallelism p})
-              numbers (map :number items)]
-          (is (= (sort numbers) (range 100 1000))))))))
+      (doseq [[call-type processor protocol] [["sync" xform-sync :sync] ["async" xform-async :callback] ["mixed" xform-sync-random :sync]]]
+        (testing (str call-type " calls")
+          (let [items (async/process-as-seq [{:number 0, :skyscraper/processor processor, :skyscraper/call-protocol protocol}] {:parallelism p})
+                numbers (map :number items)]
+            (is (= (sort numbers) (range 100 1000)))))))))
