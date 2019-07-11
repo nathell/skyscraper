@@ -1,4 +1,36 @@
 (ns skyscraper.async
+  "Parallelized context tree traversal.
+
+  First, some definitions (sketchy – some details omitted):
+
+  1. A _handler_ is a function taking a map and returning a seq of
+     maps.
+  2. A _context_ is a map that may contain a special key,
+     `::handler`, describing a handler that you may run on it.
+
+  Now imagine that we have a root context. We can run its `::handler`
+  on it, obtaining a series of child contexts. If these contexts in
+  turn contain their own `::handler`s, we can invoke each on its
+  associated context, obtaining another series of grandchild contexts.
+  Repeatedly applying this process gives rise to a tree, called a
+  _context tree_.
+
+  We call that tree _implicit_ because it is never reified as a whole
+  in the process; rather, its nodes are computed individually.
+
+  This ns implements context tree traversal parallelized using core.async,
+  with the following provisos:
+
+  - A handler can be either synchronous (in which case it's a function
+    taking context and returning seq of contexts) or asynchronous (in
+    which case it takes a seq of contexts and a callback, should return
+    immediately, and should arrange for that callback to be called with
+    a list of return contexts when it's ready). Whether a handler is
+    synchronous or asynchronous depends on a context's `::call-protocol`.
+
+  - It supports context priorities, letting you control the order in which
+    the context tree nodes will be visited. These are specified by the
+    `::priority` context key: the less the number, the higher the priority."
   (:require
     [clojure.core.async :as async
      :refer [<! <!! >! >!! alts! alts!!
