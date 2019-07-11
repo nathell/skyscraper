@@ -36,14 +36,8 @@
      :refer [<! <!! >! >!! alts! alts!!
              chan close! go go-loop put! thread]]
     [clojure.data.priority-map :refer [priority-map]]
-    [clojure.spec.alpha :as spec]
     [skyscraper.data :refer [separate]]
     [taoensso.timbre :refer [debugf infof warnf errorf]]))
-
-(spec/def :skyscraper/priority nat-int?)
-(spec/def :skyscraper/terminate boolean?)
-(spec/def :skyscraper/call-protocol #{:sync :callback})
-(spec/def :skyscraper/context (spec/keys :opt-un [:skyscraper/priority :skyscraper/terminate]))
 
 (defn priority [ctx]
   (:skyscraper/priority ctx 0))
@@ -59,13 +53,6 @@
                         (list))
                       items)
    :doing #{}})
-
-(let [x (Object.)]
-  (defn printff [& args]
-    (let [s (apply format args)]
-      (locking x
-        (print s)
-        (flush)))))
 
 (defn gimme [{:keys [todo doing] :as s}]
   (if-let [popped (first todo)]
@@ -99,7 +86,6 @@
             want 0
             terminating nil]
     (debugf "[governor] Waiting for message")
-    (printff "%10d/%-10d\r" (count (:todo state)) (count (:doing state)))
     (let [message (<! control-chan)]
       (debugf "[governor] Got %s" (if (= message :gimme) "gimme" "message"))
       (cond
