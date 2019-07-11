@@ -1,6 +1,7 @@
 (ns skyscraper.async-test
   (:require
     [clojure.core.async :as async]
+    [clojure.set :as set]
     [clojure.test :refer [deftest is testing]]
     [skyscraper.async :as sasync]
     [taoensso.timbre :as timbre]))
@@ -20,6 +21,11 @@
   (Thread/sleep (rand-int 1000))
   (on-done (xform (constantly {:skyscraper/processor xform-async, :skyscraper/call-protocol :callback}) context)))
 
+(defn xform-erroring [{:keys [number] :as context}]
+  (if (= number 5)
+    (throw (Exception. "Five is right out!"))
+    (xform (constantly {:skyscraper/processor xform-erroring, :skyscraper/call-protocol :sync}) context)))
+
 (declare xform-async-random)
 
 (defn xform-sync-random [context]
@@ -34,11 +40,12 @@
                       {:skyscraper/processor xform-async-random, :skyscraper/call-protocol :callback}])
           context)))
 
+(timbre/set-level! :info)
+
 (deftest test-process
   (sasync/process! [{:number 0, :skyscraper/processor xform-sync, :skyscraper/call-protocol :sync}] {}))
 
 (deftest test-process-as-seq
-  (timbre/set-level! :info)
   (doseq [p [1 4 16 128]]
     (testing (str "parallelism " p)
       (doseq [[call-type processor protocol] [["sync" xform-sync :sync] ["async" xform-async :callback] ["mixed" xform-sync-random :sync]]]
@@ -46,6 +53,14 @@
           (let [items (sasync/process-as-seq [{:number 0, :skyscraper/processor processor, :skyscraper/call-protocol protocol}] {:parallelism p})
                 numbers (map :number items)]
             (is (= (sort numbers) (range 100 1000)))))))))
+
+(deftest test-errors
+  (let [items (sasync/process-as-seq [{:number 0, :skyscraper/processor xform-erroring, :skyscraper/call-protocol :sync}] {})
+        numbers (remove nil? (map :number items))]
+    (is (= (count (filter :skyscraper/error items)) 1))
+    (is (= (set numbers)
+           (set/difference (set (range 100 1000))
+                           (set (range 500 600)))))))
 
 (deftest test-priority
   (let [items (sasync/process-as-seq [{:number 0, :skyscraper/processor xform-sync, :skyscraper/call-protocol :sync}]

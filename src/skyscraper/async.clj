@@ -112,6 +112,12 @@
       (>!! leaf-chan leaves))
     (>!! control-chan (processed context non-leaves))))
 
+(defmacro capture-errors [& body]
+  `(try
+     ~@body
+     (catch Exception e#
+       [{:skyscraper/error e#}])))
+
 (defn worker [options i {:keys [control-chan data-chan] :as channels}]
   (let [options (assoc options :skyscraper/worker i)]
     (thread
@@ -124,7 +130,7 @@
             (debugf "[worker %d] Terminating" i)
             (do
               (case call-protocol
-                :sync (propagate-new-contexts channels i context (processor context))
+                :sync (propagate-new-contexts channels i context (capture-errors (processor context)))
                 :callback (processor context (partial propagate-new-contexts channels i context)))
               (recur))))))))
 
