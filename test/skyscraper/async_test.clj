@@ -1,7 +1,8 @@
 (ns skyscraper.async-test
   (:require
+    [clojure.core.async :as async]
     [clojure.test :refer [deftest is testing]]
-    [skyscraper.async :as async]
+    [skyscraper.async :as sasync]
     [taoensso.timbre :as timbre]))
 
 (defn xform [next-fn {:keys [number]}]
@@ -34,7 +35,7 @@
           context)))
 
 (deftest test-process
-  (async/process! [{:number 0, :skyscraper/processor xform-sync, :skyscraper/call-protocol :sync}] {}))
+  (sasync/process! [{:number 0, :skyscraper/processor xform-sync, :skyscraper/call-protocol :sync}] {}))
 
 (deftest test-process-as-seq
   (timbre/set-level! :info)
@@ -42,12 +43,25 @@
     (testing (str "parallelism " p)
       (doseq [[call-type processor protocol] [["sync" xform-sync :sync] ["async" xform-async :callback] ["mixed" xform-sync-random :sync]]]
         (testing (str call-type " calls")
-          (let [items (async/process-as-seq [{:number 0, :skyscraper/processor processor, :skyscraper/call-protocol protocol}] {:parallelism p})
+          (let [items (sasync/process-as-seq [{:number 0, :skyscraper/processor processor, :skyscraper/call-protocol protocol}] {:parallelism p})
                 numbers (map :number items)]
             (is (= (sort numbers) (range 100 1000)))))))))
 
 (deftest test-priority
-  (let [items (async/process-as-seq [{:number 0, :skyscraper/processor xform-sync, :skyscraper/call-protocol :sync}]
+  (let [items (sasync/process-as-seq [{:number 0, :skyscraper/processor xform-sync, :skyscraper/call-protocol :sync}]
                                     {:parallelism 1, :prioritize? true})
         numbers (map :number items)]
     (is (= numbers (for [x (range 99 9 -1) y (range 10)] (+ (* 10 x) y))))))
+
+(deftest test-item-chan
+  (let [item-chan (async/chan)
+        cnt (atom 0)
+        channels (sasync/launch [{:number 0, :skyscraper/processor xform-sync, :skyscraper/call-protocol :sync}]
+                                {:item-chan item-chan})]
+    (loop []
+      (let [[items _] (async/alts!! [item-chan (:terminate-chan channels)])]
+        (when items
+          (swap! cnt + (count items))
+          (recur))))
+    (sasync/close-all! channels)
+    (is (= @cnt 999))))
