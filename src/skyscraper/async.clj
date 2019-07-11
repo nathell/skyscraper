@@ -40,7 +40,7 @@
     [taoensso.timbre :refer [debugf infof warnf errorf]]))
 
 (defn priority [ctx]
-  (:skyscraper/priority ctx 0))
+  (::priority ctx 0))
 
 (defn add-to-todo [todo new-items]
   (if (map? todo)
@@ -90,7 +90,7 @@
       (debugf "[governor] Got %s" (if (= message :gimme) "gimme" "message"))
       (cond
         terminating (when (pos? terminating)
-                      (>! data-chan {:skyscraper/terminate true})
+                      (>! data-chan {::terminate true})
                       (if (= terminating 1)
                         (close! terminate-chan)
                         (recur state want (dec terminating))))
@@ -110,7 +110,7 @@
                        terminate (do
                                    (debugf "[governor] Entering termination mode")
                                    (dotimes [i want]
-                                     (>! data-chan {:skyscraper/terminate true}))
+                                     (>! data-chan {::terminate true}))
                                    (recur state want (- parallelism want)))
                        :else (do
                                (debugf "[governor] Giving away: %d" (count giveaway))
@@ -122,7 +122,7 @@
   {:done context, :new-items results})
 
 (defn- propagate-new-contexts [{:keys [item-chan leaf-chan control-chan]} i context new-contexts]
-  (let [[non-leaves leaves] (separate :skyscraper/processor new-contexts)]
+  (let [[non-leaves leaves] (separate ::processor new-contexts)]
     (debugf "[worker %d] %d leaves, %d inner nodes produced" i (count leaves) (count non-leaves))
     (when (and item-chan (seq new-contexts))
       (>!! item-chan new-contexts))
@@ -134,16 +134,16 @@
   `(try
      ~@body
      (catch Exception e#
-       [{:skyscraper/error e#}])))
+       [{::error e#}])))
 
 (defn worker [options i {:keys [control-chan data-chan] :as channels}]
-  (let [options (assoc options :skyscraper/worker i)]
+  (let [options (assoc options ::worker i)]
     (thread
       (loop []
         (debugf "[worker %d] Sending gimme" i)
         (>!! control-chan :gimme)
         (debugf "[worker %d] Waiting for reply" i)
-        (let [{:keys [:skyscraper/terminate :skyscraper/processor :skyscraper/call-protocol] :as context} (<!! data-chan)]
+        (let [{:keys [::terminate ::processor ::call-protocol] :as context} (<!! data-chan)]
           (if terminate
             (debugf "[worker %d] Terminating" i)
             (do
