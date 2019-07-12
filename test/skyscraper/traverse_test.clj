@@ -19,7 +19,7 @@
 
 (defn xform-async [context on-done]
   (Thread/sleep (rand-int 1000))
-  (on-done (xform (constantly {::traverse/processor xform-async, ::traverse/call-protocol :callback}) context)))
+  (on-done (xform (constantly {::traverse/processor `xform-async, ::traverse/call-protocol :callback}) context)))
 
 (defn xform-erroring [{:keys [number] :as context}]
   (if (= number 5)
@@ -53,6 +53,11 @@
           (let [items (traverse/leaf-seq [{:number 0, ::traverse/processor processor, ::traverse/call-protocol protocol}] {:parallelism p})
                 numbers (map :number items)]
             (is (= (sort numbers) (range 100 1000)))))))))
+
+(deftest test-interrupt
+  (let [items (traverse/leaf-seq [{:number 0, ::traverse/processor `xform-async, ::traverse/call-protocol :callback}] {:parallelism 2, :resume-file "/tmp/skyscraper-resume"})
+        numbers (map :number items)]
+    (is (= (sort numbers) (range 100 1000)))))
 
 (deftest test-errors
   (let [items (traverse/leaf-seq [{:number 0, ::traverse/processor xform-erroring, ::traverse/call-protocol :sync}] {})

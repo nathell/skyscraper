@@ -36,6 +36,7 @@
      :refer [<! <!! >! >!! alts! alts!!
              chan close! go go-loop put! thread]]
     [clojure.data.priority-map :refer [priority-map]]
+    [clojure.java.io :as io]
     [skyscraper.data :refer [separate]]
     [taoensso.timbre :refer [debugf infof warnf errorf]]))
 
@@ -81,10 +82,17 @@
        :terminate (and (empty? doing) (empty? new-todo))
        :state {:todo new-todo, :doing doing}})))
 
-(defn- governor [{:keys [prioritize? parallelism]} seed {:keys [control-chan data-chan terminate-chan]}]
+(defn- atomic-spit [path data]
+  (let [temp (java.io.File/createTempFile "spit" nil)]
+    (spit temp data)
+    (.renameTo temp (io/file path))))
+
+(defn- governor [{:keys [prioritize? parallelism resume-file]} seed {:keys [control-chan data-chan terminate-chan]}]
   (go-loop [state (initial-state prioritize? seed)
             want 0
             terminating nil]
+    (when resume-file
+      (atomic-spit resume-file state))
     (debugf "[governor] Waiting for message")
     (let [message (<! control-chan)]
       (debugf "[governor] Got %s" (if (= message :gimme) "gimme" "message"))
@@ -143,7 +151,8 @@
         (debugf "[worker %d] Sending gimme" i)
         (>!! control-chan :gimme)
         (debugf "[worker %d] Waiting for reply" i)
-        (let [{:keys [::terminate ::processor ::call-protocol] :as context} (<!! data-chan)]
+        (let [{:keys [::terminate ::processor ::call-protocol] :as context} (<!! data-chan)
+              handler (if (fn? processor) processor (ns-resolve *ns* processor))]
           (if terminate
             (debugf "[worker %d] Terminating" i)
             (do
