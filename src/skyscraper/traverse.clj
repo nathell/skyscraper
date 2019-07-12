@@ -1,4 +1,4 @@
-(ns skyscraper.async
+(ns skyscraper.traverse
   "Parallelized context tree traversal.
 
   First, some definitions (sketchy – some details omitted):
