@@ -43,19 +43,19 @@
 (timbre/set-level! :info)
 
 (deftest test-process
-  (sasync/process! [{:number 0, ::sasync/processor xform-sync, ::sasync/call-protocol :sync}] {}))
+  (sasync/traverse! [{:number 0, ::sasync/processor xform-sync, ::sasync/call-protocol :sync}] {}))
 
 (deftest test-process-as-seq
   (doseq [p [1 4 16 128]]
     (testing (str "parallelism " p)
       (doseq [[call-type processor protocol] [["sync" xform-sync :sync] ["async" xform-async :callback] ["mixed" xform-sync-random :sync]]]
         (testing (str call-type " calls")
-          (let [items (sasync/process-as-seq [{:number 0, ::sasync/processor processor, ::sasync/call-protocol protocol}] {:parallelism p})
+          (let [items (sasync/leaf-seq [{:number 0, ::sasync/processor processor, ::sasync/call-protocol protocol}] {:parallelism p})
                 numbers (map :number items)]
             (is (= (sort numbers) (range 100 1000)))))))))
 
 (deftest test-errors
-  (let [items (sasync/process-as-seq [{:number 0, ::sasync/processor xform-erroring, ::sasync/call-protocol :sync}] {})
+  (let [items (sasync/leaf-seq [{:number 0, ::sasync/processor xform-erroring, ::sasync/call-protocol :sync}] {})
         numbers (remove nil? (map :number items))]
     (is (= (count (filter ::sasync/error items)) 1))
     (is (= (set numbers)
@@ -63,8 +63,8 @@
                            (set (range 500 600)))))))
 
 (deftest test-priority
-  (let [items (sasync/process-as-seq [{:number 0, ::sasync/processor xform-sync, ::sasync/call-protocol :sync}]
-                                    {:parallelism 1, :prioritize? true})
+  (let [items (sasync/leaf-seq [{:number 0, ::sasync/processor xform-sync, ::sasync/call-protocol :sync}]
+                               {:parallelism 1, :prioritize? true})
         numbers (map :number items)]
     (is (= numbers (for [x (range 99 9 -1) y (range 10)] (+ (* 10 x) y))))))
 
