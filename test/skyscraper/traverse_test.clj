@@ -55,9 +55,12 @@
             (is (= (sort numbers) (range 100 1000)))))))))
 
 (deftest test-interrupt
-  (let [items (traverse/leaf-seq [{:number 0, ::traverse/processor `xform-async, ::traverse/call-protocol :callback}] {:parallelism 2, :resume-file "/tmp/skyscraper-resume"})
-        numbers (map :number items)]
-    (is (= (sort numbers) (range 100 1000)))))
+  (let [items (traverse/leaf-seq [{:number 0, ::traverse/processor `xform-async, ::traverse/call-protocol :callback}] {:parallelism 2, :resume-file "/tmp/skyscraper-resume"})]
+    (dorun (take 420 items))
+    (.shutdownNow @#'async/thread-macro-executor)
+    (alter-var-root #'async/thread-macro-executor (fn [_] (java.util.concurrent.Executors/newCachedThreadPool (clojure.core.async.impl.concurrent/counted-thread-factory "async-thread-macro-%d" true))))
+    (let [items' (traverse/leaf-seq [{:number 0, ::traverse/processor `xform-async, ::traverse/call-protocol :callback}] {:parallelism 2, :resume-file "/tmp/skyscraper-resume"})]
+      (is (= (count items') 480)))))
 
 (deftest test-errors
   (let [items (traverse/leaf-seq [{:number 0, ::traverse/processor xform-erroring, ::traverse/call-protocol :sync}] {})

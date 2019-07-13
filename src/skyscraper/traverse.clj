@@ -87,8 +87,17 @@
     (spit temp data)
     (.renameTo temp (io/file path))))
 
+(defn- read-resume-file [filename]
+  (when (and filename (.exists (io/file filename)))
+    (let [{:keys [todo doing]} (read-string (slurp filename))]
+      {:todo (-> (list)
+                 (into doing)
+                 (into todo))
+       :doing #{}})))
+
 (defn- governor [{:keys [prioritize? parallelism resume-file]} seed {:keys [control-chan data-chan terminate-chan]}]
-  (go-loop [state (initial-state prioritize? seed)
+  (go-loop [state (or (read-resume-file resume-file)
+                      (initial-state prioritize? seed))
             want 0
             terminating nil]
     (when resume-file
@@ -100,7 +109,10 @@
         terminating (when (pos? terminating)
                       (>! data-chan {::terminate true})
                       (if (= terminating 1)
-                        (close! terminate-chan)
+                        (do
+                          (when resume-file
+                            (.delete (io/file resume-file)))
+                          (close! terminate-chan))
                         (recur state want (dec terminating))))
         (= message :gimme) (let [[res state] (gimme state)]
                              (debugf "[governor] Giving")
@@ -152,13 +164,15 @@
         (>!! control-chan :gimme)
         (debugf "[worker %d] Waiting for reply" i)
         (let [{:keys [::terminate ::processor ::call-protocol] :as context} (<!! data-chan)
-              handler (if (fn? processor) processor (ns-resolve *ns* processor))]
+              handler (cond (nil? processor) nil
+                            (fn? processor)  processor
+                            :otherwise       (ns-resolve *ns* processor))]
           (if terminate
             (debugf "[worker %d] Terminating" i)
             (do
               (case call-protocol
-                :sync (propagate-new-contexts channels i context (capture-errors (processor context)))
-                :callback (processor context (partial propagate-new-contexts channels i context)))
+                :sync (propagate-new-contexts channels i context (capture-errors (handler context)))
+                :callback (handler context (partial propagate-new-contexts channels i context)))
               (recur))))))))
 
 (def default-options
