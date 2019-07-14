@@ -4,7 +4,7 @@
   First, some definitions (sketchy – some details omitted):
 
   1. A _handler_ is a function taking a map and returning a seq of
-     maps.
+     maps (or a symbol naming such a function).
   2. A _context_ is a map that may contain a special key,
      `::handler`, describing a handler that you may run on it.
 
@@ -142,7 +142,7 @@
   {:done context, :new-items results})
 
 (defn- propagate-new-contexts [{:keys [item-chan leaf-chan control-chan]} i context new-contexts]
-  (let [[non-leaves leaves] (separate ::processor new-contexts)]
+  (let [[non-leaves leaves] (separate ::handler new-contexts)]
     (debugf "[worker %d] %d leaves, %d inner nodes produced" i (count leaves) (count non-leaves))
     (when (and item-chan (seq new-contexts))
       (>!! item-chan new-contexts))
@@ -163,10 +163,10 @@
         (debugf "[worker %d] Sending gimme" i)
         (>!! control-chan :gimme)
         (debugf "[worker %d] Waiting for reply" i)
-        (let [{:keys [::terminate ::processor ::call-protocol] :as context} (<!! data-chan)
-              handler (cond (nil? processor) nil
-                            (fn? processor)  processor
-                            :otherwise       (ns-resolve *ns* processor))]
+        (let [{:keys [::terminate ::handler ::call-protocol] :as context} (<!! data-chan)
+              handler (cond (nil? handler) nil
+                            (fn? handler)  handler
+                            :otherwise     (ns-resolve *ns* handler))]
           (if terminate
             (debugf "[worker %d] Terminating" i)
             (do
