@@ -6,7 +6,7 @@
     [skyscraper.traverse :as traverse]
     [taoensso.timbre :as timbre]))
 
-(defn xform [next-fn {:keys [number]}]
+(defn xform [next-fn {:keys [number]} options]
   (filter (comp pos? :number)
           (map #(let [n (+ (* 10 number) %)]
                   (merge {:number n, ::traverse/priority (- n)}
@@ -14,31 +14,31 @@
                            (next-fn))))
                (range 10))))
 
-(defn xform-sync [context]
-  (xform (constantly {::traverse/handler xform-sync, ::traverse/call-protocol :sync}) context))
+(defn xform-sync [context options]
+  (xform (constantly {::traverse/handler xform-sync, ::traverse/call-protocol :sync}) context options))
 
-(defn xform-async [context on-done]
+(defn xform-async [context options on-done]
   (Thread/sleep (rand-int 1000))
-  (on-done (xform (constantly {::traverse/handler `xform-async, ::traverse/call-protocol :callback}) context)))
+  (on-done (xform (constantly {::traverse/handler `xform-async, ::traverse/call-protocol :callback}) context options)))
 
-(defn xform-erroring [{:keys [number] :as context}]
+(defn xform-erroring [{:keys [number] :as context} options]
   (if (= number 5)
     (throw (Exception. "Five is right out!"))
-    (xform (constantly {::traverse/handler xform-erroring, ::traverse/call-protocol :sync}) context)))
+    (xform (constantly {::traverse/handler xform-erroring, ::traverse/call-protocol :sync}) context options)))
 
 (declare xform-async-random)
 
-(defn xform-sync-random [context]
+(defn xform-sync-random [context options]
   (xform #(rand-nth [{::traverse/handler xform-sync-random, ::traverse/call-protocol :sync}
                      {::traverse/handler xform-async-random, ::traverse/call-protocol :callback}])
-         context))
+         context options))
 
-(defn xform-async-random [context on-done]
+(defn xform-async-random [context options on-done]
   (Thread/sleep (rand-int 1000))
   (on-done
    (xform #(rand-nth [{::traverse/handler xform-sync-random, ::traverse/call-protocol :sync}
                       {::traverse/handler xform-async-random, ::traverse/call-protocol :callback}])
-          context)))
+          context options)))
 
 (timbre/set-level! :info)
 

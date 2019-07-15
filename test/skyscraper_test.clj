@@ -1,11 +1,12 @@
 (ns skyscraper-test
-  (:require [clojure.test :refer :all]
-            [clj-http.client :as http]
+  (:require [clj-http.client :as http]
             [clojure.string :as string]
+            [clojure.test :refer :all]
+            [net.cgrand.enlive-html :refer [select text]]
             [skyscraper :refer :all]
             [skyscraper.cache :as cache]
-            [taoensso.timbre :as timbre]
-            [net.cgrand.enlive-html :refer [select text]]))
+            [skyscraper.helpers :refer [href]]
+            [taoensso.timbre :as timbre]))
 
 (defn dummy-site-content
   [i]
@@ -34,11 +35,11 @@
         {:processor :root, :url (href a)})
       {:number num})))
 
-(defprocessor root
+(defprocessor :root
   :cache-key-fn (fn [ctx] (str "numbers/" (url-number (:url ctx))))
   :process-fn process-root)
 
-(defprocessor root-uncached
+(defprocessor :root-uncached
   :process-fn process-root)
 
 (defn seed [& _]

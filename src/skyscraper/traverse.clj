@@ -171,8 +171,8 @@
             (debugf "[worker %d] Terminating" i)
             (do
               (case call-protocol
-                :sync (propagate-new-contexts channels i context (capture-errors (handler context)))
-                :callback (handler context (partial propagate-new-contexts channels i context)))
+                :sync (propagate-new-contexts channels i context (capture-errors (handler context options)))
+                :callback (handler context options (partial propagate-new-contexts channels i context)))
               (recur))))))))
 
 (def default-options
