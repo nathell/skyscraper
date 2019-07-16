@@ -137,9 +137,18 @@
   (let [document (-> context ::response :body string-resource)
         processor-name (:processor context)
         result (run-processor processor-name document context)]
-    [(-> context
-         (assoc ::result result)
-         (dissoc ::traverse/handler ::traverse/call-protocol))]))
+    (for [item (ensure-seq result)]
+      (-> context
+          (merge-contexts item)
+          (assoc ::traverse/handler `store-handler
+                 ::traverse/call-protocol :sync)))))
+
+(defn store-handler [context options]
+  (if (:processor context)
+    [(assoc context
+            ::traverse/handler `init-handler
+            ::traverse/call-protocol :sync)]
+    [(dissoc context ::traverse/handler ::traverse/call-protocol)]))
 
 (defn download-handler [context {:keys [connection-manager download-semaphore retries] :as options} callback]
   (let [req (merge {:method :get, :url (:url context)}
