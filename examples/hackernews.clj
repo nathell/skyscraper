@@ -35,4 +35,4 @@
 (defprocessor :comments
   :cache-template "hn/story/:id"
   :process-fn (fn [res context]
-                {:foo "ugabuga"}))
+                {:commenters (mapv text (select res [:a.hnuser]))}))
