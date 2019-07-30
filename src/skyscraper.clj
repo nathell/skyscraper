@@ -224,11 +224,15 @@
   [context])
 
 (defn process-handler [context options]
-  (let [document (-> context ::response :body string-resource)
-        processor-name (:processor context)
-        result (run-processor processor-name document context)]
-    (for [item (ensure-seq result)]
-      (merge-contexts context item))))
+  (if-let [cached-result (cache/load (:processed-cache options) (::cache-key context))]
+    (for [item cached-result]
+      (merge-contexts context item))
+    (let [document (-> context ::response :body string-resource)
+          processor-name (:processor context)
+          result (ensure-seq (run-processor processor-name document context))]
+      (cache/save (:processed-cache options) (::cache-key context) result)
+      (for [item result]
+        (merge-contexts context item)))))
 
 (defn sync-handler [context options]
   (let [f (ns-resolve *ns* (::stage context))
