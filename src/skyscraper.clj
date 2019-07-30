@@ -80,10 +80,9 @@
      (ensure-seq ((:process-fn processor) document context)))))
 
 (defn dissoc-internal [ctx]
-  (let [removed-keys #{:method :processor :desc :form-params}]
+  (let [removed-keys #{:method :processor :desc :form-params ::new-items}]
     (into {}
-          (remove (fn [[k _]] (or (contains? removed-keys k)
-                                  #_(= (namespace k) (namespace ::x)))))
+          (remove (fn [[k _]] (or (contains? removed-keys k))))
           ctx)))
 
 (defn allows?
@@ -146,12 +145,14 @@
               (map (fn [[k v]] [(keyword (name k)) v])))
         m))
 
-(def pipeline
+(defn make-pipeline [options]
   `[init-handler
     check-cache-handler
     download-handler
     store-cache-handler
-    process-handler])
+    process-handler
+    ~@(when (:db options) [`store-db-handler])
+    split-handler])
 
 (defn advance-pipeline [pipeline context]
   (let [next-stage (or (::next-stage context)
@@ -170,14 +171,16 @@
                  ::traverse/call-protocol (if (= next-stage `download-handler)
                                             :callback
                                             :sync)))
-      (dissoc context ::stage ::next-stage ::traverse/handler ::traverse/call-protocol))))
+      (dissoc context ::stage ::next-stage ::traverse/handler ::traverse/call-protocol ::response ::cache-key))))
 
 (defn init-handler [context options]
   (let [{:keys [cache-template cache-key-fn]} (merge options (@processors (:processor context)))
         cache-key-fn (or cache-key-fn
                          (when cache-template
                            #(format-template cache-template %)))]
-    [(assoc context ::cache-key (cache-key-fn context))]))
+    [(assoc context
+            ::current-processor (:processor context)
+            ::cache-key (cache-key-fn context))]))
 
 (defn check-cache-handler [context options]
   (if-let [key (::cache-key context)]
@@ -188,7 +191,7 @@
       [context])
     [context]))
 
-(defn download-handler [context {:keys [connection-manager download-semaphore retries] :as options} callback]
+(defn download-handler [context {:keys [pipeline connection-manager download-semaphore retries] :as options} callback]
   (let [req (merge {:method :get, :url (:url context)}
                    (extract-namespaced-keys "http" context))
         success-fn (fn [resp]
@@ -225,22 +228,32 @@
 
 (defn process-handler [context options]
   (if-let [cached-result (cache/load (:processed-cache options) (::cache-key context))]
-    (for [item cached-result]
-      (merge-contexts context item))
-    (let [document (-> context ::response :body string-resource)
+    [(assoc context ::new-items (map (partial merge-contexts context) cached-result))]
+    (let [parse (:parse-fn options)
+          document (-> context ::response :body parse)
           processor-name (:processor context)
           result (ensure-seq (run-processor processor-name document context))]
       (cache/save (:processed-cache options) (::cache-key context) result)
-      (for [item result]
-        (merge-contexts context item)))))
+      [(assoc context ::new-items (map (partial merge-contexts context) result))])))
+
+(defn split-handler [context options]
+  (map #(assoc % ::stage `split-handler)
+       (::new-items context)))
+
+(defn store-db-handler [context options]
+  [(assoc context ::new-items
+          (maybe-store-in-db
+           (:db options)
+           (@processors (::current-processor context))
+           (::new-items context)))])
 
 (defn sync-handler [context options]
   (let [f (ns-resolve *ns* (::stage context))
         results (f context options)]
-    (map (partial advance-pipeline pipeline) results)))
+    (map (partial advance-pipeline (:pipeline options)) results)))
 
-(defn initialize-seed [seed]
-  (map #(advance-pipeline pipeline %)
+(defn initialize-seed [options seed]
+  (map #(advance-pipeline (:pipeline options) %)
        (ensure-seq seed)))
 
 (def default-options
@@ -248,18 +261,25 @@
    :timeout 60000,
    :retries 5,
    :conn-mgr-options {},
+   :parse-fn string-resource,
    :http-options {:redirect-strategy :lax, :as :auto}})
 
 (defn initialize-options
   [options]
   (let [options (merge default-options options)]
     (assoc options
+           :pipeline (make-pipeline options)
            :html-cache (sanitize-cache (:html-cache options) html-cache-dir)
            :processed-cache (sanitize-cache (:processed-cache options) processed-cache-dir)
            :connection-manager (http-conn/make-reuseable-async-conn-manager (:conn-mgr-options options))
            :download-semaphore (java.util.concurrent.Semaphore. (:max-connections options)))))
 
 (defn scrape [seed & {:as options}]
-  (let [seed (initialize-seed seed)
-        options (initialize-options options)]
+  (let [options (initialize-options options)
+        seed (initialize-seed options seed)]
     (traverse/leaf-seq seed options)))
+
+(defn scrape! [seed & {:as options}]
+  (let [options (initialize-options options)
+        seed (initialize-seed options seed)]
+    (traverse/traverse! seed options)))
