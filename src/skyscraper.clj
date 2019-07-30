@@ -14,6 +14,20 @@
     [taoensso.timbre :refer [debugf infof warnf errorf]])
   (:import [java.net URL]))
 
+;;; Directories
+
+(def output-dir
+  "All Skyscraper output, either temporary or final, goes under here."
+  (str (System/getProperty "user.home") "/skyscraper-data/"))
+
+(def html-cache-dir
+  "Local copies of downloaded HTML files go here."
+  (str output-dir "cache/html/"))
+
+(def processed-cache-dir
+  "Cache storing the interim results of processing HTML files."
+  (str output-dir "cache/processed/"))
+
 ;;; Micro-templating framework
 
 (defn format-template
@@ -38,6 +52,17 @@
     (when cache-key-fn
       (cache-key-fn context))))
 
+;;; Cache
+
+(defn sanitize-cache
+  "Converts a cache argument to the processor to a CacheBackend if it
+   isn't one already."
+  [value cache-dir]
+  (cond
+   (= value true) (cache/fs cache-dir)
+   (not value) (cache/null)
+   :otherwise value))
+
 ;;; Defining processors
 
 (defonce processors (atom {}))
@@ -58,7 +83,7 @@
   (let [removed-keys #{:method :processor :desc :form-params}]
     (into {}
           (remove (fn [[k _]] (or (contains? removed-keys k)
-                                  (= (namespace k) (namespace ::x)))))
+                                  #_(= (namespace k) (namespace ::x)))))
           ctx)))
 
 (defn allows?
@@ -105,14 +130,7 @@
     contexts))
 
 (defn describe [ctx]
-  (-> ctx
-      dissoc-internal
-      (dissoc :url)
-      pr-str) #_
-  (cond->
-      (:url ctx)
-    (:http/cookies ctx) (str " cookies: " (pr-str (:http/cookies ctx)))
-    (:form-params ctx) (str " form-params: " (pr-str (:form-params ctx)))))
+  (:url ctx))
 
 (defn string-resource
   "Returns an Enlive resource for a HTML snippet passed as a string."
@@ -128,27 +146,47 @@
               (map (fn [[k v]] [(keyword (name k)) v])))
         m))
 
-(defn init-handler [context options]
-  [(assoc context
-          ::traverse/handler `download-handler
-          ::traverse/call-protocol :callback)])
+(def pipeline
+  `[init-handler
+    check-cache-handler
+    download-handler
+    store-cache-handler
+    process-handler])
 
-(defn process-handler [context options]
-  (let [document (-> context ::response :body string-resource)
-        processor-name (:processor context)
-        result (run-processor processor-name document context)]
-    (for [item (ensure-seq result)]
+(defn advance-pipeline [pipeline context]
+  (let [next-stage (or (::next-stage context)
+                       (->> pipeline
+                            (drop-while #(not= % (::stage context)))
+                            second)
+                       (when (:processor context)
+                         (first pipeline)))]
+    (if next-stage
       (-> context
-          (merge-contexts item)
-          (assoc ::traverse/handler `store-handler
-                 ::traverse/call-protocol :sync)))))
+          (dissoc ::next-stage)
+          (assoc ::stage next-stage
+                 ::traverse/handler (if (= next-stage `download-handler)
+                                      `download-handler
+                                      `sync-handler)
+                 ::traverse/call-protocol (if (= next-stage `download-handler)
+                                            :callback
+                                            :sync)))
+      (dissoc context ::stage ::next-stage ::traverse/handler ::traverse/call-protocol))))
 
-(defn store-handler [context options]
-  (if (:processor context)
-    [(assoc context
-            ::traverse/handler `init-handler
-            ::traverse/call-protocol :sync)]
-    [(dissoc context ::traverse/handler ::traverse/call-protocol)]))
+(defn init-handler [context options]
+  (let [{:keys [cache-template cache-key-fn]} (merge options (@processors (:processor context)))
+        cache-key-fn (or cache-key-fn
+                         (when cache-template
+                           #(format-template cache-template %)))]
+    [(assoc context ::cache-key (cache-key-fn context))]))
+
+(defn check-cache-handler [context options]
+  (if-let [key (::cache-key context)]
+    (if-let [item (cache/load-string (:html-cache options) key)]
+      [(assoc context
+              ::response {:body item}
+              ::next-stage `process-handler)]
+      [context])
+    [context]))
 
 (defn download-handler [context {:keys [connection-manager download-semaphore retries] :as options} callback]
   (let [req (merge {:method :get, :url (:url context)}
@@ -157,11 +195,9 @@
                      (debugf "[download] Downloaded %s" (describe context))
                      (.release download-semaphore)
                      (callback
-                      [(cond-> context
-                          true (assoc ::response resp
-                                      ::traverse/handler `process-handler
-                                      ::traverse/call-protocol :sync)
-                          (:cookies resp) (update :http/cookies merge (:cookies resp)))]))
+                      [(cond-> (advance-pipeline pipeline context)
+                         true (assoc ::response resp)
+                         (:cookies resp) (update :http/cookies merge (:cookies resp)))]))
         error-fn (fn [error]
                    (.release download-semaphore)
                    (let [retry (inc (or (::retry context) 0))]
@@ -183,8 +219,24 @@
        success-fn
        error-fn))))
 
+(defn store-cache-handler [context options]
+  (cache/save-string (:html-cache options) (::cache-key context) (get-in context [::response :body]))
+  [context])
+
+(defn process-handler [context options]
+  (let [document (-> context ::response :body string-resource)
+        processor-name (:processor context)
+        result (run-processor processor-name document context)]
+    (for [item (ensure-seq result)]
+      (merge-contexts context item))))
+
+(defn sync-handler [context options]
+  (let [f (ns-resolve *ns* (::stage context))
+        results (f context options)]
+    (map (partial advance-pipeline pipeline) results)))
+
 (defn initialize-seed [seed]
-  (map #(assoc % ::traverse/handler `init-handler ::traverse/call-protocol :sync)
+  (map #(advance-pipeline pipeline %)
        (ensure-seq seed)))
 
 (def default-options
@@ -198,6 +250,8 @@
   [options]
   (let [options (merge default-options options)]
     (assoc options
+           :html-cache (sanitize-cache (:html-cache options) html-cache-dir)
+           :processed-cache (sanitize-cache (:processed-cache options) processed-cache-dir)
            :connection-manager (http-conn/make-reuseable-async-conn-manager (:conn-mgr-options options))
            :download-semaphore (java.util.concurrent.Semaphore. (:max-connections options)))))
 

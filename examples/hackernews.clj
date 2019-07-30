@@ -18,7 +18,7 @@
   :cache-template "hn/index"
   :process-fn (fn [res context]
                 (let [rows (select res [:table :> [:tr (nth-child 3)] :table :tr])]
-                  (for [[title-row author-row _] (take 2 (partition 3 (drop-last 2 rows)))
+                  (for [[title-row author-row _] (partition 3 (drop-last 2 rows))
                         :let [a-title (first (select title-row [:td.title :a]))
                               a-author (first (select author-row [[:a (nth-child 2)]]))]]
                     {:story-url (href a-title),
