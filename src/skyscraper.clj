@@ -3,6 +3,7 @@
     [clj-http.client :as http]
     [clj-http.conn-mgr :as http-conn]
     [clj-http.core :as http-core]
+    [clojure.java.jdbc :as jdbc]
     [clojure.set :refer [intersection]]
     [clojure.string :as string]
     [net.cgrand.enlive-html :as enlive]
@@ -151,7 +152,7 @@
     download-handler
     store-cache-handler
     process-handler
-    ~@(when (:db options) [`store-db-handler])
+    ~@(when (or (:db options) (:db-file options)) [`store-db-handler])
     split-handler])
 
 (defn advance-pipeline [pipeline context]
@@ -269,6 +270,10 @@
   (let [options (merge default-options options)]
     (assoc options
            :pipeline (make-pipeline options)
+           :db (when-let [file (:db-file options)]
+                 {:classname "org.sqlite.JDBC",
+                  :subprotocol "sqlite",
+                  :subname file})
            :html-cache (sanitize-cache (:html-cache options) html-cache-dir)
            :processed-cache (sanitize-cache (:processed-cache options) processed-cache-dir)
            :connection-manager (http-conn/make-reuseable-async-conn-manager (:conn-mgr-options options))
@@ -282,4 +287,7 @@
 (defn scrape! [seed & {:as options}]
   (let [options (initialize-options options)
         seed (initialize-seed options seed)]
-    (traverse/traverse! seed options)))
+    (if (:db options)
+      (jdbc/with-db-transaction [db (:db options)]
+        (traverse/traverse! seed (assoc options :db db)))
+      (traverse/traverse! seed options))))

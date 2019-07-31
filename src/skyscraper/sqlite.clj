@@ -39,7 +39,7 @@
   (doseq [ctx ctxs
           [k v] ctx
           :when (contains? columns k)
-          :let [check (if (= k :parent) int? string?)]
+          :let [check (if (= k :parent) int? #(or (nil? %) (string? %)))]
           :when (not (check v))]
     (warnf "[sqlite] Wrong type for key %s" k)))
 
@@ -55,9 +55,8 @@
         contexts-to-preserve (for [ctx ctxs :let [id (existing-ids (select-keys ctx id))] :when id] (assoc ctx :parent id))
         new-contexts (remove #(contains? existing-ids (select-keys % id)) ctxs)
         to-insert (map (partial db-row columns) new-contexts)
-        mutex (Object.)
         try-inserting (fn []
-                        (let [ids (map rowid (locking mutex (jdbc/insert-multi! db name to-insert)))]
+                        (let [ids (map rowid (locking db (jdbc/insert-multi! db name to-insert)))]
                           (mapv #(assoc %1 :parent %2) new-contexts ids)))]
     (debugf "[sqlite] Got %s, existing %s, inserting %s" (count ctxs) (count existing-ids) (count to-insert))
     (let [inserted (try
