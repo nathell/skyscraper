@@ -141,8 +141,8 @@
 (defn- processed [context results]
   {:done context, :new-items results})
 
-(defn- propagate-new-contexts [{:keys [item-chan leaf-chan control-chan]} i context new-contexts]
-  (let [[non-leaves leaves] (separate ::handler new-contexts)]
+(defn- propagate-new-contexts [{:keys [item-chan leaf-chan control-chan]} enhance i context new-contexts]
+  (let [[non-leaves leaves] (separate ::handler (map enhance new-contexts))]
     (debugf "[worker %d] %d leaves, %d inner nodes produced" i (count leaves) (count non-leaves))
     (when (and item-chan (seq new-contexts))
       (>!! item-chan new-contexts))
@@ -156,8 +156,14 @@
      (catch Exception e#
        [{::error e#}])))
 
-(defn- worker [options i {:keys [control-chan data-chan] :as channels}]
-  (let [options (assoc options ::worker i)]
+(defn- worker [{:keys [enhance?] :as options} i {:keys [control-chan data-chan enhancer-input-chan enhancer-output-chan] :as channels}]
+  (let [options (assoc options ::worker i)
+        enhance (fn [x]
+                  (if (and enhancer-input-chan enhance? (enhance? x))
+                    (do
+                      (>!! enhancer-input-chan x)
+                      (<!! enhancer-output-chan))
+                    x))]
     (thread
       (loop []
         (debugf "[worker %d] Sending gimme" i)
@@ -171,13 +177,21 @@
             (debugf "[worker %d] Terminating" i)
             (do
               (case call-protocol
-                :sync (propagate-new-contexts channels i context (capture-errors (handler context options)))
-                :callback (handler context options (partial propagate-new-contexts channels i context)))
+                :sync (propagate-new-contexts channels enhance i context (capture-errors (handler context options)))
+                :callback (handler context options (partial propagate-new-contexts channels enhance i context)))
               (recur))))))))
 
 (def default-options
   {:prioritize? false
    :parallelism 4})
+
+(defn enhancer
+  [enhance-fn {:keys [enhancer-input-chan enhancer-output-chan]}]
+  (thread
+    (loop []
+      (when-let [item (<!! enhancer-input-chan)]
+        (>!! enhancer-output-chan (enhance-fn item))
+        (recur)))))
 
 (defn launch
   "Launches a parallel tree traversal. Spins up a number of core.async
@@ -199,15 +213,20 @@
   function. See `traverse!` or `chan->seq` for an example of how to
   put it together."
   [seed options]
-  (let [{:keys [parallelism leaf-chan item-chan] :as options} (merge default-options options)
-        channels {:control-chan (chan)
-                  :data-chan (chan)
-                  :terminate-chan (chan)
-                  :leaf-chan leaf-chan
-                  :item-chan item-chan}]
+  (let [{:keys [parallelism leaf-chan item-chan enhance-fn] :as options} (merge default-options options)
+        channels (merge {:control-chan (chan)
+                         :data-chan (chan)
+                         :terminate-chan (chan)
+                         :leaf-chan leaf-chan
+                         :item-chan item-chan}
+                        (when enhance-fn
+                          {:enhancer-input-chan (chan)
+                           :enhancer-output-chan (chan)}))]
     (governor options seed channels)
     (dotimes [i parallelism]
       (worker options i channels))
+    (when enhance-fn
+      (enhancer enhance-fn channels))
     channels))
 
 (defn wait!

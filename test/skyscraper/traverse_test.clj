@@ -45,6 +45,12 @@
 (deftest test-process
   (traverse/traverse! [{:number 0, ::traverse/handler xform-sync, ::traverse/call-protocol :sync}] {}))
 
+(deftest test-enhance
+  (traverse/traverse!
+   [{:number 0, ::traverse/handler xform-sync, ::traverse/call-protocol :sync}]
+   {:enhance-fn identity
+    :enhance? (constantly true)}))
+
 (deftest test-process-as-seq
   (doseq [p [1 4 16 128]]
     (testing (str "parallelism " p)
