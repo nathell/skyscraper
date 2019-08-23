@@ -45,10 +45,17 @@
 (deftest test-process
   (traverse/traverse! [{:number 0, ::traverse/handler xform-sync, ::traverse/call-protocol :sync}] {}))
 
+(defn enhancer
+  [_ {:keys [enhancer-input-chan enhancer-output-chan]}]
+  (loop []
+    (when-let [item (async/<!! enhancer-input-chan)]
+      (async/>!! enhancer-output-chan item)
+      (recur))))
+
 (deftest test-enhance
   (traverse/traverse!
    [{:number 0, ::traverse/handler xform-sync, ::traverse/call-protocol :sync}]
-   {:enhance-fn identity
+   {:enhancer enhancer
     :enhance? (constantly true)}))
 
 (deftest test-process-as-seq

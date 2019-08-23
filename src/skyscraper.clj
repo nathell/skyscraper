@@ -3,13 +3,11 @@
     [clj-http.client :as http]
     [clj-http.conn-mgr :as http-conn]
     [clj-http.core :as http-core]
-    [clojure.java.jdbc :as jdbc]
     [clojure.set :refer [intersection]]
     [clojure.string :as string]
     [net.cgrand.enlive-html :as enlive]
     [reaver]
     [skyscraper.cache :as cache]
-    [skyscraper.data :refer [separate]]
     [skyscraper.sqlite :as sqlite]
     [skyscraper.traverse :as traverse]
     [taoensso.timbre :refer [debugf infof warnf errorf]])
@@ -122,13 +120,6 @@
               new)]
     (merge preserve new)))
 
-(defn maybe-store-in-db [db {:keys [name db-columns id] :as q} contexts]
-  (if (and db db-columns)
-    (let [[skipped inserted] (separate ::db-skip contexts)
-          new-items (sqlite/insert-all! db name id db-columns inserted)]
-      (into (vec skipped) new-items))
-    contexts))
-
 (defn describe [ctx]
   (:url ctx))
 
@@ -152,7 +143,6 @@
     download-handler
     store-cache-handler
     process-handler
-    ~@(when (or (:db options) (:db-file options)) [`store-db-handler])
     split-handler])
 
 (defn advance-pipeline [pipeline context]
@@ -180,7 +170,7 @@
                          (when cache-template
                            #(format-template cache-template %)))]
     [(assoc context
-            ::current-processor (:processor context)
+            ::current-processor (@processors (:processor context))
             ::cache-key (cache-key-fn context))]))
 
 (defn check-cache-handler [context options]
@@ -241,13 +231,6 @@
   (map #(assoc % ::stage `split-handler)
        (::new-items context)))
 
-(defn store-db-handler [context options]
-  [(assoc context ::new-items
-          (maybe-store-in-db
-           (:db options)
-           (@processors (::current-processor context))
-           (::new-items context)))])
-
 (defn sync-handler [context options]
   (let [f (ns-resolve *ns* (::stage context))
         results (f context options)]
@@ -267,13 +250,17 @@
 
 (defn initialize-options
   [options]
-  (let [options (merge default-options options)]
-    (assoc options
-           :pipeline (make-pipeline options)
-           :db (when-let [file (:db-file options)]
+  (let [options (merge default-options options)
+        db (or (:db options)
+               (when-let [file (:db-file options)]
                  {:classname "org.sqlite.JDBC",
                   :subprotocol "sqlite",
-                  :subname file})
+                  :subname file}))]
+    (assoc options
+           :pipeline (make-pipeline options)
+           :db db
+           :enhancer (when db sqlite/enhancer)
+           :enhance? ::new-items
            :html-cache (sanitize-cache (:html-cache options) html-cache-dir)
            :processed-cache (sanitize-cache (:processed-cache options) processed-cache-dir)
            :connection-manager (http-conn/make-reuseable-async-conn-manager (:conn-mgr-options options))

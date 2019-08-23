@@ -185,14 +185,6 @@
   {:prioritize? false
    :parallelism 4})
 
-(defn enhancer
-  [enhance-fn {:keys [enhancer-input-chan enhancer-output-chan]}]
-  (thread
-    (loop []
-      (when-let [item (<!! enhancer-input-chan)]
-        (>!! enhancer-output-chan (enhance-fn item))
-        (recur)))))
-
 (defn launch
   "Launches a parallel tree traversal. Spins up a number of core.async
   threads that actually perform it, then immediately returns a map of
@@ -213,20 +205,21 @@
   function. See `traverse!` or `chan->seq` for an example of how to
   put it together."
   [seed options]
-  (let [{:keys [parallelism leaf-chan item-chan enhance-fn] :as options} (merge default-options options)
+  (let [{:keys [parallelism leaf-chan item-chan enhancer] :as options} (merge default-options options)
         channels (merge {:control-chan (chan)
                          :data-chan (chan)
                          :terminate-chan (chan)
                          :leaf-chan leaf-chan
                          :item-chan item-chan}
-                        (when enhance-fn
+                        (when enhancer
                           {:enhancer-input-chan (chan)
                            :enhancer-output-chan (chan)}))]
     (governor options seed channels)
     (dotimes [i parallelism]
       (worker options i channels))
-    (when enhance-fn
-      (enhancer enhance-fn channels))
+    (when enhancer
+      (thread
+        (enhancer options channels)))
     channels))
 
 (defn wait!

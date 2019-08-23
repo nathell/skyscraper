@@ -1,8 +1,11 @@
 (ns skyscraper.sqlite
-  (:require [clojure.core.strint :refer [<<]]
-            [clojure.java.jdbc :as jdbc]
-            [clojure.string :as string]
-            [taoensso.timbre :refer [debugf warnf]]))
+  (:require
+    [clojure.core.async :as async]
+    [clojure.core.strint :refer [<<]]
+    [clojure.java.jdbc :as jdbc]
+    [clojure.string :as string]
+    [skyscraper.data :refer [separate]]
+    [taoensso.timbre :refer [debugf warnf]]))
 
 (defn db-column-name [col]
   (string/replace (name col) "-" "_"))
@@ -69,3 +72,19 @@
                          (throw e))))]
       (debugf "[sqlite] Returning %s" (count (into contexts-to-preserve inserted)))
       (into contexts-to-preserve inserted))))
+
+(defn maybe-store-in-db [db {:keys [name db-columns id] :as q} contexts]
+  (if (and db db-columns)
+    (let [[skipped inserted] (separate :skyscraper/db-skip contexts)
+          new-items (insert-all! db name id db-columns inserted)]
+      (into (vec skipped) new-items))
+    contexts))
+
+(defn enhancer [{:keys [db]} {:keys [enhancer-input-chan enhancer-output-chan]}]
+  (jdbc/with-db-transaction [db db]
+    (loop []
+      (when-let [item (async/<!! enhancer-input-chan)]
+        (let [new-items (:skyscraper/new-items item)
+              updated (maybe-store-in-db db (:skyscraper/current-processor item) new-items)]
+          (async/>!! enhancer-output-chan (assoc item :skyscraper/new-items updated)))
+        (recur)))))
