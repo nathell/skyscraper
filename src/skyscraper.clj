@@ -274,7 +274,4 @@
 (defn scrape! [seed & {:as options}]
   (let [options (initialize-options options)
         seed (initialize-seed options seed)]
-    (if (:db options)
-      (jdbc/with-db-transaction [db (:db options)]
-        (traverse/traverse! seed (assoc options :db db)))
-      (traverse/traverse! seed options))))
+    (traverse/traverse! seed options)))

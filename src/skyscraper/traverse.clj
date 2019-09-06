@@ -230,13 +230,9 @@
 (defn close-all!
   "Closes channels used by the traversal process. Call this function
   after `wait!` returns."
-  [{:keys [control-chan data-chan leaf-chan item-chan]}]
-  (close! control-chan)
-  (close! data-chan)
-  (when leaf-chan
-    (close! leaf-chan))
-  (when item-chan
-    (close! item-chan))
+  [channels]
+  (doseq [ch (vals channels) :when ch]
+    (close! ch))
   nil)
 
 (defn traverse!

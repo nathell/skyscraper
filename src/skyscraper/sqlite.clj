@@ -54,7 +54,7 @@
                ctxs)
         existing (when id (try (query db name id ctxs)
                                (catch org.sqlite.SQLiteException e nil)))
-        existing-ids (when id (into {} (map (fn [r] [(select-keys r id) (:id r)])) existing))
+        existing-ids (into {} (map (fn [r] [(select-keys r id) (:id r)])) existing)
         contexts-to-preserve (for [ctx ctxs :let [id (existing-ids (select-keys ctx id))] :when id] (assoc ctx :parent id))
         new-contexts (remove #(contains? existing-ids (select-keys % id)) ctxs)
         to-insert (map (partial db-row columns) new-contexts)
