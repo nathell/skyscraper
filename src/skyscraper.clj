@@ -3,6 +3,7 @@
     [clj-http.client :as http]
     [clj-http.conn-mgr :as http-conn]
     [clj-http.core :as http-core]
+    [clojure.edn :as edn]
     [clojure.set :refer [intersection]]
     [clojure.string :as string]
     [net.cgrand.enlive-html :as enlive]
@@ -11,7 +12,8 @@
     [skyscraper.sqlite :as sqlite]
     [skyscraper.traverse :as traverse]
     [taoensso.timbre :refer [debugf infof warnf errorf]])
-  (:import [java.net URL]))
+  (:import [java.net URL]
+           [java.nio.charset Charset]))
 
 ;;; Directories
 
@@ -128,6 +130,23 @@
   [s]
   (enlive/html-resource (java.io.StringReader. s)))
 
+(defn interpret-body
+  [headers ^bytes body]
+  (let [stream1 (java.io.ByteArrayInputStream. body)
+        body-map (http/parse-html stream1)
+        additional-headers (http/get-headers-from-body body-map)
+        all-headers (merge headers additional-headers)
+        content-type (get all-headers "content-type")]
+    (String. body (Charset/forName (http/detect-charset content-type)))))
+
+(defn enlive-parse
+  [headers body]
+  (string-resource (interpret-body headers body)))
+
+(defn reaver-parse
+  [headers body]
+  (reaver/parse (interpret-body headers body)))
+
 ;;; Scraping
 
 (defn extract-namespaced-keys
@@ -175,9 +194,9 @@
 
 (defn check-cache-handler [context options]
   (if-let [key (::cache-key context)]
-    (if-let [item (cache/load-string (:html-cache options) key)]
+    (if-let [item (cache/load-blob (:html-cache options) key)]
       [(assoc context
-              ::response {:body item}
+              ::response {:body (:blob item), :headers (:meta item)}
               ::next-stage `process-handler)]
       [context])
     [context]))
@@ -209,22 +228,24 @@
     (let [req (merge {:async? true,
                       :connection-manager connection-manager}
                      req (:http-options options))]
-      (http/request req
-       success-fn
-       error-fn))))
+      (http/with-additional-middleware [http/wrap-lower-case-headers]
+        (http/request req
+                      success-fn
+                      error-fn)))))
 
 (defn store-cache-handler [context options]
-  (cache/save-string (:html-cache options) (::cache-key context) (get-in context [::response :body]))
+  (cache/save-blob (:html-cache options) (::cache-key context) (get-in context [::response :body]) (get-in context [::response :headers]))
   [context])
 
 (defn process-handler [context options]
-  (if-let [cached-result (cache/load (:processed-cache options) (::cache-key context))]
-    [(assoc context ::new-items (map (partial merge-contexts context) cached-result))]
+  (if-let [cached-result (cache/load-blob (:processed-cache options) (::cache-key context))]
+    [(assoc context ::new-items (map (partial merge-contexts context) (edn/read-string (String. (:blob cached-result)))))]
     (let [parse (:parse-fn options)
-          document (-> context ::response :body parse)
+          {:keys [headers body]} (::response context)
+          document (parse headers body)
           processor-name (:processor context)
           result (ensure-seq (run-processor processor-name document context))]
-      (cache/save (:processed-cache options) (::cache-key context) result)
+      (cache/save-blob (:processed-cache options) (::cache-key context) (.getBytes (pr-str result)) nil)
       [(assoc context ::new-items (map (partial merge-contexts context) result))])))
 
 (defn split-handler [context options]
@@ -245,8 +266,8 @@
    :timeout 60000,
    :retries 5,
    :conn-mgr-options {},
-   :parse-fn string-resource,
-   :http-options {:redirect-strategy :lax, :as :auto}})
+   :parse-fn enlive-parse,
+   :http-options {:redirect-strategy :lax, :as :byte-array}})
 
 (defn initialize-options
   [options]

@@ -2,53 +2,71 @@
 
 (ns skyscraper.cache
   (:refer-clojure :exclude [load load-string])
-  (:require [clojure.java.io :as io]))
+  (:require [clojure.java.io :as io]
+            [clojure.edn :as edn])
+  (:import [java.io InputStream OutputStream]))
+
+;;; Netstrings
+
+(let [bytes-type (type (byte-array []))]
+  (defn byte-array? [item]
+    (= (type item) bytes-type)))
+
+(defn write-netstring
+  [^OutputStream stream item]
+  (let [^bytes b (cond (byte-array? item) item
+                       (string? item)     (.getBytes item)
+                       :otherwise         (.getBytes (pr-str item)))]
+    (.write stream (.getBytes (str (count b))))
+    (.write stream (int \:))
+    (.write stream b)
+    (.write stream (int \,))))
+
+(defn read-netstring
+  [^InputStream stream]
+  (loop [len 0]
+    (let [ch (.read stream)]
+      (cond (<= 48 ch 57) (recur (+ (* 10 len) ch -48))
+            (= ch 58) (let [arr (byte-array len)]
+                        (.read stream arr)
+                        (assert (= (.read stream) 44))
+                        arr)
+            :otherwise (throw (Exception. "colon needed after length"))))))
+
+;;; Actual cache
 
 (defprotocol CacheBackend
-  "Provides facilities for caching HTML and arbitrary Clojure maps in
+  "Provides facilities for caching downloaded blobs (typically HTML),
+   potentially enriched with some metadata (typically headers), in
    some kind of storage. Implementations of this protocol can be passed
    as :html-cache and :processed-cache options to `skyscraper/scrape`."
-  (save-string [cache key string]
-    "Saves a string under a given key to the cache.")
-  (save [cache key value]
-    "Saves an arbitrary Clojure value (actually a map) under a given
-    key to the cache.")
-  (load-string [cache key]
-    "Loads and returns a string corresponding to the given key. If the
-     cache didn't contain the key, returns nil, telling Skyscraper to
-     redownload it.")
-  (load [cache key]
-    "Loads and returns a map corresponding to given key. If the cache
-     didn't contain the key, returns nil, telling Skyscraper to
-     recompute the value. It is okay if the returned map is of another
-     type than the one saved originally, as long as they both implement
-     IPersistentMap with the same contents."))
+  (save-blob [cache key blob metadata])
+  (load-blob [cache key]))
 
-;; An implementation of CacheBackend that stores the strings and values
-;; in a filesystem under a specific directory (root-dir). The file names
-;; correspond to the stored keys, with .html or .edn extensions as
-;; appropriate. root-dir must end in a path separator (/).
+;; An implementation of CacheBackend that stores the blobs in a
+;; filesystem under a specific directory (root-dir).  The blobs are
+;; stored as netstrings (http://cr.yp.to/proto/netstrings.txt),
+;; prefixed with metadata EDN also stored as a netstring. The
+;; filenames correspond to the stored keys. root-dir must end in a
+;; path separator (/).
 (deftype FSCache
     [root-dir]
   CacheBackend
-  (save-string [cache key string]
-    (let [file (str root-dir key ".html")]
+  (save-blob [cache key blob metadata]
+    (let [meta-str (pr-str metadata)
+          file (str root-dir key)]
       (io/make-parents file)
-      (spit file string)))
-  (save [cache key value]
-    (let [file (str root-dir key ".edn")]
-      (io/make-parents file)
-      (with-open [f (io/writer file)]
-        (binding [*out* f *print-length* nil *print-level* nil]
-          (prn value)))))
-  (load-string [cache key]
-    (let [f (io/file (str root-dir key ".html"))]
-      (when (.exists f)
-        (slurp f))))
-  (load [cache key]
-    (let [f (io/file (str root-dir key ".edn"))]
-      (when (.exists f)
-        (read-string (slurp f))))))
+      (with-open [f (io/output-stream file)]
+        (write-netstring f metadata)
+        (write-netstring f blob))))
+  (load-blob [cache key]
+    (try
+      (with-open [f (io/input-stream (str root-dir key))]
+        (let [meta-blob (read-netstring f)
+              blob (read-netstring f)]
+          {:meta (edn/read-string (String. meta-blob))
+           :blob blob}))
+      (catch Exception _ nil))))
 
 (defn fs
   "Creates a filesystem-based cache backend with a given root directory."
@@ -59,10 +77,8 @@
 (deftype NullCache
     []
   CacheBackend
-  (save-string [_ _ _] nil)
-  (save [_ _ _] nil)
-  (load-string [_ _] nil)
-  (load [_ _] nil))
+  (save-blob [_ _ _ _] nil)
+  (load-blob [_ _] nil))
 
 (defn null
   "Creates a null cache backend."
@@ -71,25 +87,19 @@
 
 (extend-protocol CacheBackend
   nil
-  (save-string [_ _ _] nil)
-  (save [_ _ _] nil)
-  (load-string [_ _] nil)
-  (load [_ _] nil))
+  (save-blob [_ _ _ _] nil)
+  (load-blob [_ _] nil))
 
 ;; An in-memory implementation of CacheBackend backed by two atoms.
 (deftype MemoryCache
-    [strings values]
+    [storage]
   CacheBackend
-  (save-string [cache key string]
-    (swap! strings assoc key string))
-  (save [cache key value]
-    (swap! values assoc key value))
-  (load-string [cache key]
-    (@strings key))
-  (load [cache key]
-    (@values key)))
+  (save-blob [cache key blob metadata]
+    (swap! storage assoc key {:blob blob, :meta metadata}))
+  (load-blob [cache key]
+    (@storage key)))
 
 (defn memory
   "Creates a memory cache backend."
   []
-  (MemoryCache. (atom {}) (atom {})))
+  (MemoryCache. (atom {})))

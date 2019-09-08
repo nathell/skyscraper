@@ -9,6 +9,7 @@
                  [org.clojure/data.priority-map "0.0.10"]
                  [org.clojure/java.jdbc "0.7.6"]
                  [clj-http "3.9.1"]
+                 [crouton "0.1.2"]
                  [enlive "1.1.6" :exclusions [jsoup]]
                  [http-kit "2.3.0"]
                  [reaver "0.1.2"]
