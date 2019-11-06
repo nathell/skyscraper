@@ -227,11 +227,13 @@
     (infof "[download] Downloading %s" (describe context))
     (let [req (merge {:async? true,
                       :connection-manager connection-manager}
-                     req (:http-options options))]
+                     req (:http-options options))
+          request-fn (or (:request-fn options)
+                         http/request)]
       (http/with-additional-middleware [http/wrap-lower-case-headers]
-        (http/request req
-                      success-fn
-                      error-fn)))))
+        (request-fn req
+                    success-fn
+                    error-fn)))))
 
 (defn store-cache-handler [context options]
   (cache/save-blob (:html-cache options) (::cache-key context) (get-in context [::response :body]) (get-in context [::response :headers]))

@@ -27,6 +27,13 @@
   (swap! hits inc)
   {:body (dummy-site-content (url-number url))})
 
+(defn mock-request
+  [{:keys [url]} success-fn error-fn]
+  (swap! hits inc)
+  (let [response {:headers {"content-type" "text/html; charset=utf-8"}
+                  :body (.getBytes (dummy-site-content (url-number url)))}]
+    (success-fn response)))
+
 (defn process-root [res ctx]
   (let [num (text (first (select res [:h1])))
         subpages (select res [:a])]
@@ -51,9 +58,11 @@
 (timbre/set-level! :warn)
 
 (deftest basic-scraping
-  (with-redefs [http/get mock-get]
-    (is (= (count (scrape :skyscraper-test/seed :html-cache nil :processed-cache nil))
-           900))))
+  (is (= (count (scrape (skyscraper-test/seed)
+                        :html-cache nil
+                        :processed-cache nil
+                        :request-fn mock-request))
+         900)))
 
 (deftest caches
   (reset! hits 0)
@@ -85,13 +94,13 @@
   (is (allows? {} {:k1 1, :k2 2}))
   (is (allows? {:k1 1} {:k2 2})))
 
-(defprocessor nil-url-test-processor-root
+(defprocessor :nil-url-test-processor-root
   :cache-template "nil-url"
   :process-fn (fn [res ctx]
                 (for [a (select res [:a])]
                   {:title (text a), :url (href a), :processor :skyscraper-test/nil-url-test-processor-child})))
 
-(defprocessor nil-url-test-processor-child
+(defprocessor :nil-url-test-processor-child
   :cache-template "nil-url/:title"
   :process-fn (fn [res ctx]
                 [{:info (text (first (select res [:h1])))}]))
