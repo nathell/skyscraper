@@ -46,13 +46,6 @@
         fmt (string/replace template re "%s")]
     (apply format fmt (map m keys))))
 
-(defn cache-key [{:keys [cache-template cache-key-fn]} context]
-  (let [cache-key-fn (or cache-key-fn
-                         (when cache-template
-                           (partial format-template cache-template)))]
-    (when cache-key-fn
-      (cache-key-fn context))))
-
 ;;; Cache
 
 (defn sanitize-cache
@@ -181,13 +174,13 @@
                  ::traverse/call-protocol (if (= next-stage `download-handler)
                                             :callback
                                             :sync)))
-      (dissoc context ::stage ::next-stage ::traverse/handler ::traverse/call-protocol ::response ::cache-key))))
+      (dissoc context ::stage ::next-stage ::current-processor ::traverse/handler ::traverse/call-protocol ::response ::cache-key))))
 
 (defn init-handler [context options]
   (let [{:keys [cache-template cache-key-fn]} (merge options (@processors (:processor context)))
         cache-key-fn (or cache-key-fn
-                         (when cache-template
-                           #(format-template cache-template %)))]
+                         #(when cache-template
+                           (format-template cache-template %)))]
     [(assoc context
             ::current-processor (@processors (:processor context))
             ::cache-key (cache-key-fn context))]))

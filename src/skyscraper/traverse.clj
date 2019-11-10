@@ -70,8 +70,8 @@
       [(map key (take n todo)) (nth (iterate pop' todo) n)])))
 
 (defn- done [{:keys [todo doing] :as s}
-            {:keys [done new-items]}
-            want]
+             {:keys [done new-items] :as t}
+             want]
   (if-not (contains? doing done)
     {:unexpected done, :state s}
     (let [all-todo (add-to-todo todo new-items)

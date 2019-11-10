@@ -58,7 +58,7 @@
 (timbre/set-level! :warn)
 
 (deftest basic-scraping
-  (is (= (count (scrape (skyscraper-test/seed)
+  (is (= (count (scrape (seed)
                         :html-cache nil
                         :processed-cache nil
                         :request-fn mock-request))
@@ -66,19 +66,19 @@
 
 (deftest caches
   (reset! hits 0)
-  (with-redefs [http/get mock-get]
-    (let [cache (cache/memory)]
-      (is (= (count (scrape :skyscraper-test/seed :html-cache cache :processed-cache cache)) 900))
-      (let [hits-before @hits
-            _ (dorun (scrape :skyscraper-test/seed :html-cache cache :processed-cache cache))
-            hits-after @hits]
-        (is (= hits-before hits-after)))
-      (let [res1 (doall (scrape :skyscraper-test/seed :html-cache cache :processed-cache cache))
-            res2 (doall (scrape :skyscraper-test/seed :html-cache cache :processed-cache nil))
-            res3 (doall (scrape :skyscraper-test/seed :html-cache nil :processed-cache cache))
-            res4 (doall (scrape :skyscraper-test/seed :html-cache nil :processed-cache nil))
-            res5 (doall (scrape :skyscraper-test/seed-uncached :html-cache nil :processed-cache nil))]
-        (is (= res1 res2 res3 res4 res5))))))
+  (let [hcache (cache/memory)
+        pcache (cache/memory)]
+    (is (= (count (scrape (seed) :request-fn mock-request :html-cache hcache :processed-cache pcache)) 900))
+    (let [hits-before @hits
+          _ (dorun (scrape (seed) :request-fn mock-request :html-cache hcache :processed-cache pcache))
+          hits-after @hits]
+      (is (= hits-before hits-after)))
+    (let [res1 (doall (scrape (seed) :request-fn mock-request :html-cache hcache :processed-cache pcache))
+          res2 (doall (scrape (seed) :request-fn mock-request :html-cache hcache :processed-cache nil))
+          res3 (doall (scrape (seed) :request-fn mock-request :html-cache nil :processed-cache pcache))
+          res4 (doall (scrape (seed) :request-fn mock-request :html-cache nil :processed-cache nil))
+          res5 (doall (scrape (seed-uncached) :request-fn mock-request :html-cache nil :processed-cache nil))]
+      (is (apply = (mapv #(sort-by :number %) [res1 res2 res3 res4 res5]))))))
 
 (deftest test-merge-urls
   (are [y z] (= (merge-urls "https://foo.pl/bar/baz" y) z)
