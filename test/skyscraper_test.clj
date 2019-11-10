@@ -98,7 +98,7 @@
   :cache-template "nil-url"
   :process-fn (fn [res ctx]
                 (for [a (select res [:a])]
-                  {:title (text a), :url (href a), :processor :skyscraper-test/nil-url-test-processor-child})))
+                  {:title (text a), :url (href a), :processor :nil-url-test-processor-child})))
 
 (defprocessor :nil-url-test-processor-child
   :cache-template "nil-url/:title"
@@ -108,7 +108,11 @@
 (deftest test-nil-url
   (let [html-main "<html><a href='/sub'>link</a><a name='anchor'>non-link</a></html>"
         html-child "<html><h1>Info</h1></html>"
-        get (fn [url & args] {:body (if (string/ends-with? url "/sub") html-child html-main)})]
-    (with-redefs [http/get get]
-      (is (= (scrape [{:url "http://localhost/", :processor :skyscraper-test/nil-url-test-processor-root}] :html-cache nil :processed-cache nil)
-             [{:title "link", :info "Info"}])))))
+        request (fn [{:keys [url]} success-fn error-fn]
+                  (success-fn
+                   {:headers {"content-type" "text/html; charset=utf-8"}
+                    :body (.getBytes (if (string/ends-with? url "/sub") html-child html-main))}))]
+    (is (= (remove :processor
+                   (scrape [{:url "http://localhost/", :processor :nil-url-test-processor-root}]
+                           :html-cache nil :processed-cache nil :request-fn request))
+           [{:title "link", :info "Info"}]))))

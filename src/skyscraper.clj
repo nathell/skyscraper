@@ -74,7 +74,7 @@
      (ensure-seq ((:process-fn processor) document context)))))
 
 (defn dissoc-internal [ctx]
-  (let [removed-keys #{:method :processor :desc :form-params ::new-items}]
+  (let [removed-keys #{:method :processor :desc :url :form-params ::new-items}]
     (into {}
           (remove (fn [[k _]] (or (contains? removed-keys k))))
           ctx)))
@@ -162,8 +162,10 @@
                        (->> pipeline
                             (drop-while #(not= % (::stage context)))
                             second)
-                       (when (:processor context)
+                       (when (and (:processor context) (:url context))
                          (first pipeline)))]
+    (when (and (:processor context) (not (:url context)))
+      (warnf "Encountered context with processor but no URL: %s" (pr-str context)))
     (if next-stage
       (-> context
           (dissoc ::next-stage)
