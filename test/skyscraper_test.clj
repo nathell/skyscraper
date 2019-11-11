@@ -34,13 +34,16 @@
                   :body (.getBytes (dummy-site-content (url-number url)))}]
     (success-fn response)))
 
-(defn process-root [res ctx]
-  (let [num (text (first (select res [:h1])))
+(defn process-root [res {:keys [i] :as ctx}]
+  (let [numtext (text (first (select res [:h1])))
+        number (Long/parseLong (subs numtext 7))
         subpages (select res [:a])]
     (if (seq subpages)
       (for [a subpages]
-        {:processor :root, :url (href a)})
-      {:number num})))
+        (assoc
+         {:processor :root, :url (href a), :i (inc i)}
+         (keyword (str "level" i)) number))
+      {:number number})))
 
 (defprocessor :root
   :cache-key-fn (fn [ctx] (str "numbers/" (url-number (:url ctx))))
@@ -50,10 +53,10 @@
   :process-fn process-root)
 
 (defn seed [& _]
-  [{:url "http://localhost/0", :processor :root}])
+  [{:url "http://localhost/0", :i 0, :processor :root}])
 
 (defn seed-uncached [& _]
-  [{:url "http://localhost/0", :processor :root-uncached}])
+  [{:url "http://localhost/0", :i 0, :processor :root-uncached}])
 
 (timbre/set-level! :warn)
 
@@ -63,6 +66,17 @@
                         :processed-cache nil
                         :request-fn mock-request))
          900)))
+
+(deftest test-only
+  (reset! hits 0)
+  (is (= (->> (scrape (seed)
+                      :only {:level1 1}
+                      :html-cache nil
+                      :processed-cache nil
+                      :request-fn mock-request)
+              (map :number)
+              (sort))
+         (range 100 200))))
 
 (deftest caches
   (reset! hits 0)

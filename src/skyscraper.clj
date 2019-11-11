@@ -89,13 +89,13 @@
       true)))
 
 (defn filter-contexts
-  [data params]
-  (if-let [only (:only params)]
+  [options contexts]
+  (if-let [only (:only options)]
     (let [filter-fn (if (fn? only)
                       only
                       (fn [x] (some #(allows? % x) (ensure-seq only))))]
-      (filter filter-fn data))
-    data))
+      (filter filter-fn contexts))
+    contexts))
 
 (defn merge-urls
   "Fills the missing parts of new-url (which can be either absolute,
@@ -246,8 +246,9 @@
       [(assoc context ::new-items (map (partial merge-contexts context) result))])))
 
 (defn split-handler [context options]
-  (map #(assoc % ::stage `split-handler)
-       (::new-items context)))
+  (->> (::new-items context)
+       (map #(assoc % ::stage `split-handler))
+       (filter-contexts options)))
 
 (defn sync-handler [context options]
   (let [f (ns-resolve *ns* (::stage context))
