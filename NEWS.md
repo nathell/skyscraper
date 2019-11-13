@@ -2,11 +2,34 @@
 
 ## Unreleased
 
+- Skyscraper has been rewritten from scratch to be asynchronous and multithreaded,
+  based on [core.async].  See [doc/multithread.md] for details.
+- Backwards-incompatible API changes:
+  - Processors are now named by keywords.
+    - `defprocessor` now takes a keyword name, and registers a function in the
+      global registry instead of defining it. This means that it’s no longer possible
+      to call one processor from another: if you need that, define `process-fn` as a
+      named function.
+    - The context values corresponding to `:processor` keys are now expected to
+      be keywords.
+  - `scrape` no longer guarantees the order in which the site will be scraped.
+    In particular, two different invocations of `scrape` are not guaranteed to return
+    the scraped data in the same order. If you need that guarantee, set
+    `parallelism` and `max-connections` to 1.
+  - The cache interface has been overhauled. Caching now works by storing binary blobs
+    (rather than strings), along with metadata (e.g., HTTP headers). Caches created
+    by Skyscraper 0.1 or 0.2 cannot be reused for 0.3.
+- Skyscraper now supports saving the scrape results to a SQLite database.
+- In addition to the classic `scrape` function that returns a lazy sequence of nodes, there is an
+  alternative, non-lazy, imperative interface (`scrape!`) that treats producing new results as
+  side-effects.
 - [reaver] (using JSoup) is now available as an optional underlying engine, as an alternative to Enlive.
 - All options can now be provided either per-page or globally. (Thanks to Alexander Solovyov for the suggestion.)
 - All options are now optional, including sane default for `process-fn`.
 - `get-cache-keys` has been removed. If you want the same effect, include `:cache-key` in the desired contexts.
 
+ [core.async]: https://github.com/clojure/core.async
+ [doc/multithread.md]: doc/multithread.md
  [reaver]: https://github.com/mischov/reaver
 
 ## 0.2.3 (2016-11-17)
