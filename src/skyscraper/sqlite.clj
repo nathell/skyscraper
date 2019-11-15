@@ -75,7 +75,8 @@
 
 (defn maybe-store-in-db [db {:keys [name db-columns id] :as q} contexts]
   (if (and db db-columns)
-    (let [[skipped inserted] (separate :skyscraper/db-skip contexts)
+    (let [db-columns (distinct (conj db-columns :parent))
+          [skipped inserted] (separate :skyscraper/db-skip contexts)
           new-items (insert-all! db name id db-columns inserted)]
       (into (vec skipped) new-items))
     contexts))
