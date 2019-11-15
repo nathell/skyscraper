@@ -150,11 +150,12 @@
       (>!! leaf-chan leaves))
     (>!! control-chan (processed context non-leaves))))
 
-(defmacro capture-errors [& body]
-  `(try
-     ~@body
-     (catch Exception e#
-       [{::error e#}])))
+(defmacro capture-errors [context & body]
+  `(let [context# ~context]
+     (try
+       ~@body
+       (catch Exception e#
+         [{::context context#, ::error e#}]))))
 
 (defn- worker [{:keys [enhance?] :as options} i {:keys [control-chan data-chan enhancer-input-chan enhancer-output-chan] :as channels}]
   (let [options (assoc options ::worker i)
@@ -177,7 +178,7 @@
             (debugf "[worker %d] Terminating" i)
             (do
               (case call-protocol
-                :sync (propagate-new-contexts channels enhance i context (capture-errors (handler context options)))
+                :sync (propagate-new-contexts channels enhance i context (capture-errors context (handler context options)))
                 :callback (handler context options (partial propagate-new-contexts channels enhance i context)))
               (recur))))))))
 
