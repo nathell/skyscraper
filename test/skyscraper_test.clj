@@ -1,5 +1,7 @@
 (ns skyscraper-test
   (:require [clj-http.client :as http]
+            [clojure.java.io :as io]
+            [clojure.java.jdbc :as jdbc]
             [clojure.string :as string]
             [clojure.test :refer :all]
             [net.cgrand.enlive-html :refer [select text]]
@@ -18,14 +20,11 @@
 
 (defn url-number
   [url]
-  (Integer/parseInt (last (string/split url #"/"))))
+  (try
+    (Integer/parseInt (last (string/split url #"/")))
+    (catch Exception _ 0)))
 
 (def hits (atom 0))
-
-(defn mock-get
-  [url & args]
-  (swap! hits inc)
-  {:body (dummy-site-content (url-number url))})
 
 (defn mock-request
   [{:keys [url]} success-fn error-fn]
@@ -130,3 +129,34 @@
                    (scrape [{:url "http://localhost/", :processor :nil-url-test-processor-root}]
                            :html-cache nil :processed-cache nil :request-fn request))
            [{:title "link", :info "Info"}]))))
+
+(defprocessor :users
+  :process-fn (fn [res ctx]
+                [{:name "John", :surname "Doe", :url "/", :processor :accounts}])
+  :db-columns [:name :surname]
+  :id [:name :surname])
+
+(defprocessor :accounts
+  :process-fn (fn [res ctx]
+                [{:bank-account "0123-4567"}
+                 {:bank-account "8888-9999"}])
+  :db-columns [:bank-account]
+  :id [:bank-account])
+
+(deftest test-sqlite
+  (let [db-file (java.io.File/createTempFile "test" ".sqlite")
+        db-uri (str "jdbc:sqlite:" db-file)]
+    (try
+      (dotimes [_ 2]
+        (scrape! [{:url "http://example.com", :processor :users}]
+                 :request-fn mock-request
+                 :db-file db-file))
+      (jdbc/with-db-connection [conn db-uri]
+        (is (= (->> (jdbc/query conn "SELECT name, surname, bank_account FROM accounts JOIN users ON accounts.parent = users.id")
+                    (sort-by :bank_account))
+               [{:name "John", :surname "Doe", :bank_account "0123-4567"}
+                {:name "John", :surname "Doe", :bank_account "8888-9999"}]))
+        (is (= (jdbc/query conn "SELECT count(*) cnt FROM accounts")
+               [{:cnt 2}])))
+      (finally
+        (.delete db-file)))))

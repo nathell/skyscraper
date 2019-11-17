@@ -10,6 +10,11 @@
 (defn db-column-name [col]
   (string/replace (name col) "-" "_"))
 
+(defn normalize-keys [m]
+  (into {}
+        (map (fn [[k v]] [(keyword (string/replace (name k) "_" "-")) v]))
+        m))
+
 (defn db-row [columns context]
   (into {}
         (map (fn [[k v]] [(db-column-name k) v]))
@@ -52,7 +57,7 @@
         ctxs (if id
                (remove (partial all-nils? id) ctxs)
                ctxs)
-        existing (when id (try (query db name id ctxs)
+        existing (when id (try (map normalize-keys (query db name id ctxs))
                                (catch org.sqlite.SQLiteException e nil)))
         existing-ids (into {} (map (fn [r] [(select-keys r id) (:id r)])) existing)
         contexts-to-preserve (for [ctx ctxs :let [id (existing-ids (select-keys ctx id))] :when id] (assoc ctx :parent id))
