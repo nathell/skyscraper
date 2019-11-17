@@ -2,6 +2,7 @@
   :description "Structural scraping for the rest of us."
   :license {:name "MIT", :url "https://github.com/nathell/skyscraper/blob/master/README.md#license"}
   :scm {:name "git", :url "https://github.com/nathell/skyscraper"}
+  :codox {:metadata {:doc/format :markdown}}
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [org.clojure/core.async "0.4.474"]
                  [org.clojure/core.incubator "0.1.4"]
