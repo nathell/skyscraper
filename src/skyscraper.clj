@@ -61,7 +61,32 @@
 
 (defonce processors (atom {}))
 
-(defn defprocessor [name & {:keys [process-fn], :as args}]
+(defn defprocessor
+  "Registers a processor named `name` with arguments `args`.
+
+  `name` should be a keyword. `args`, optional keys and values, may include:
+
+  - `:process-fn` – a function that takes a resource and a parent context, and returns a
+    sequence of child contexts (corresponding to the scraped resource). Alternatively,
+    it can return one context only, in which case it will be wrapped in a sequence.
+  - `:cache-template` – a string specifying the template for cache keys. Ignored when
+    `:cache-key-fn` is specified.
+  - `:cache-key-fn` – a function taking the context and returning the cache key. Overrides
+    `:cache-template`. Useful when mere templating does not suffice.
+  - `:url-fn` – a one-argument function taking the context and returning the URL to visit.
+    By default, Skyscraper just extracts the value under the `:url` key from the context.
+  - `:error-handler` – see [error-handling.md].
+  - `:updatable` – a boolean (false by default). When true, the pages accessed by this
+    processor are considered to change often. When Skyscraper is run in update mode (see
+    below), these pages will be re-downloaded and re-processed even if they had been present
+    in the HTML or processed caches, respectively.
+  - `:parse-fn` – a custom function that will be used to produce Enlive resources from
+    downloaded documents. This can be useful, for instance, if you want to use reaver rather
+    than Enlive; if you are scraping something other than HTMLs (e.g., PDFs via a custom
+    parser); or when you’re scraping malformed HTML and need an interim fixup steps before
+    parsing.
+  - `:db-columns` – a vector of keys that are supposed to exist."
+  [name & {:as args}]
   (swap! processors assoc name (merge {:name name} args)))
 
 (defn ensure-seq [x]
