@@ -99,9 +99,10 @@
      (ensure-seq ((:process-fn processor) document context)))))
 
 (defn dissoc-internal [ctx]
-  (let [removed-keys #{:method :processor :desc :url :form-params ::new-items}]
+  (let [removed-keys #{:processor :url ::new-items}]
     (into {}
-          (remove (fn [[k _]] (or (contains? removed-keys k))))
+          (remove (fn [[k _]] (or (contains? removed-keys k)
+                                  (and (keyword? k) (= (namespace k) "http")))))
           ctx)))
 
 (defn allows?
