@@ -105,6 +105,9 @@
                                   (and (keyword? k) (= (namespace k) "http")))))
           ctx)))
 
+(defn dissoc-leaf-keys [context]
+  (dissoc context ::stage ::next-stage ::current-processor ::traverse/handler ::traverse/call-protocol ::response ::cache-key))
+
 (defn allows?
   "True if all keys in m1 that are also in m2 have equal values in both maps."
   [m1 m2]
@@ -175,13 +178,30 @@
               (map (fn [[k v]] [(keyword (name k)) v])))
         m))
 
-(defn make-pipeline [options]
+(defn make-pipeline [{:keys [download-mode] :as options}]
   `[init-handler
     check-cache-handler
-    download-handler
+    ~(case download-mode
+       :async `download-handler
+       :sync `sync-download-handler)
     store-cache-handler
     process-handler
-    split-handler])
+    ~(case download-mode
+       :async `split-handler
+       :sync `sync-split-handler)])
+
+(defn compose-sync-handlers
+  ([h] h)
+  ([h1 h2]
+   (fn [context options]
+     (h1 (first (h2 context options)) options)))
+  ([h1 h2 & hs]
+   (compose-sync-handlers h1 (apply compose-sync-handlers h2 hs))))
+
+(defn make-squashed-handler
+  [pipeline]
+  (apply compose-sync-handlers
+         (map (partial ns-resolve *ns*) (reverse pipeline))))
 
 (defn advance-pipeline [pipeline context]
   (let [next-stage (or (::next-stage context)
@@ -202,7 +222,7 @@
                  ::traverse/call-protocol (if (= next-stage `download-handler)
                                             :callback
                                             :sync)))
-      (dissoc context ::stage ::next-stage ::current-processor ::traverse/handler ::traverse/call-protocol ::response ::cache-key))))
+      (dissoc-leaf-keys context))))
 
 (defn init-handler [context options]
   (let [{:keys [cache-template cache-key-fn]} (merge options (@processors (:processor context)))
@@ -256,6 +276,30 @@
                     success-fn
                     error-fn)))))
 
+(defn sync-download-handler [context {:keys [pipeline] :as options}]
+  (let [req (merge {:method :get, :url (:url context)}
+                   (extract-namespaced-keys "http" context)
+                   (:http-options options))
+        request-fn (or (:request-fn options)
+                       http/request)]
+    (try
+      (infof "[download] Downloading %s" (describe context))
+      (let [resp (http/with-additional-middleware [http/wrap-lower-case-headers]
+                   (request-fn req))]
+        (debugf "[download] Downloaded %s" (describe context))
+        [(cond-> context
+           true (assoc ::response resp)
+           (:cookies resp) (update :http/cookies merge (:cookies resp)))])
+      (catch Exception error
+        (let [retry (inc (or (::retry context) 0))]
+          [(if (< retry (:retries options))
+             (do
+               (warnf "[download] Unexpected error %s, retry %s, context %s" error retry context)
+               (assoc context ::retry retry))
+             (do
+               (warnf "[download] Unexpected error %s, giving up, context %s" error context)
+               {::error error, ::context context}))])))))
+
 (defn store-cache-handler [context options]
   (cache/save-blob (:html-cache options) (::cache-key context) (get-in context [::response :body]) (get-in context [::response :headers]))
   [context])
@@ -276,14 +320,26 @@
        (map #(assoc % ::stage `split-handler))
        (filter-contexts options)))
 
+(defn sync-split-handler [context options]
+  (->> (::new-items context)
+       (filter-contexts options)
+       (map #(if (and (:processor %) (:url %))
+               %
+               (dissoc-leaf-keys %)))))
+
 (defn sync-handler [context options]
   (let [f (ns-resolve *ns* (::stage context))
         results (f context options)]
     (map (partial advance-pipeline (:pipeline options)) results)))
 
-(defn initialize-seed [options seed]
-  (map #(advance-pipeline (:pipeline options) %)
-       (ensure-seq seed)))
+(defn initialize-seed [{:keys [download-mode pipeline] :as options} seed]
+  (let [seed (ensure-seq seed)]
+    (case download-mode
+      :async (mapv #(advance-pipeline pipeline %) seed)
+      :sync (mapv #(assoc %
+                          ::traverse/call-protocol :sync
+                          ::traverse/handler (make-squashed-handler pipeline))
+                  seed))))
 
 (def default-options
   {:max-connections 10,
@@ -291,6 +347,7 @@
    :retries 5,
    :conn-mgr-options {},
    :parse-fn enlive-parse,
+   :download-mode :async,
    :http-options {:redirect-strategy :lax, :as :byte-array}})
 
 (defn initialize-options
