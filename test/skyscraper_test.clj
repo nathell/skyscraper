@@ -27,11 +27,13 @@
 (def hits (atom 0))
 
 (defn mock-request
-  [{:keys [url]} success-fn error-fn]
+  [{:keys [url async?]} & [success-fn error-fn]]
   (swap! hits inc)
   (let [response {:headers {"content-type" "text/html; charset=utf-8"}
                   :body (.getBytes (dummy-site-content (url-number url)))}]
-    (success-fn response)))
+    (if async?
+      (success-fn response)
+      response)))
 
 (defn process-root [res {:keys [i] :as ctx}]
   (let [numtext (text (first (select res [:h1])))
@@ -64,6 +66,12 @@
                         :html-cache nil
                         :processed-cache nil
                         :request-fn mock-request))
+         900))
+  (is (= (count (scrape (seed)
+                        :html-cache nil
+                        :processed-cache nil
+                        :request-fn mock-request
+                        :download-mode :sync))
          900)))
 
 (deftest test-only
@@ -84,8 +92,10 @@
     (is (= (count (scrape (seed) :request-fn mock-request :html-cache hcache :processed-cache pcache)) 900))
     (let [hits-before @hits
           _ (dorun (scrape (seed) :request-fn mock-request :html-cache hcache :processed-cache pcache))
-          hits-after @hits]
-      (is (= hits-before hits-after)))
+          hits-after @hits
+          _ (dorun (scrape (seed) :request-fn mock-request :html-cache hcache :processed-cache pcache :parallelism 1 :download-mode :sync))
+          hits-after-sync @hits]
+      (is (= hits-before hits-after hits-after-sync)))
     (let [res1 (doall (scrape (seed) :request-fn mock-request :html-cache hcache :processed-cache pcache))
           res2 (doall (scrape (seed) :request-fn mock-request :html-cache hcache :processed-cache nil))
           res3 (doall (scrape (seed) :request-fn mock-request :html-cache nil :processed-cache pcache))
