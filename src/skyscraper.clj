@@ -102,11 +102,13 @@
   (let [removed-keys #{:processor :url ::new-items}]
     (into {}
           (remove (fn [[k _]] (or (contains? removed-keys k)
-                                  (and (keyword? k) (= (namespace k) "http")))))
+                                  (and (keyword? k)
+                                       (= (namespace k) "http")
+                                       (not= k :http/cookies)))))
           ctx)))
 
 (defn dissoc-leaf-keys [context]
-  (dissoc context ::stage ::next-stage ::current-processor ::traverse/handler ::traverse/call-protocol ::response ::cache-key))
+  (dissoc context ::stage ::next-stage ::current-processor ::traverse/handler ::traverse/call-protocol ::response ::cache-key :http/cookies))
 
 (defn allows?
   "True if all keys in m1 that are also in m2 have equal values in both maps."
