@@ -278,8 +278,8 @@
                     success-fn
                     error-fn)))))
 
-(defn sync-download-handler [context {:keys [pipeline] :as options}]
-  (let [req (merge {:method :get, :url (:url context)}
+(defn sync-download-handler [context {:keys [pipeline connection-manager] :as options}]
+  (let [req (merge {:method :get, :url (:url context), :connection-manager connection-manager}
                    (extract-namespaced-keys "http" context)
                    (:http-options options))
         request-fn (or (:request-fn options)
@@ -367,7 +367,9 @@
            :enhance? ::new-items
            :html-cache (sanitize-cache (:html-cache options) html-cache-dir)
            :processed-cache (sanitize-cache (:processed-cache options) processed-cache-dir)
-           :connection-manager (http-conn/make-reuseable-async-conn-manager (:conn-mgr-options options))
+           :connection-manager (case (:download-mode options)
+                                 :sync (http-conn/make-reusable-conn-manager (:conn-mgr-options options))
+                                 :async (http-conn/make-reuseable-async-conn-manager (:conn-mgr-options options)))
            :download-semaphore (java.util.concurrent.Semaphore. (:max-connections options)))))
 
 (defn scrape [seed & {:as options}]
