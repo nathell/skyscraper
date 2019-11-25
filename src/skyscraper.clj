@@ -181,16 +181,9 @@
         m))
 
 (defn make-pipeline [{:keys [download-mode] :as options}]
-  `[init-handler
-    check-cache-handler
-    ~(case download-mode
-       :async `download-handler
-       :sync `sync-download-handler)
-    store-cache-handler
-    process-handler
-    ~(case download-mode
-       :async `split-handler
-       :sync `sync-split-handler)])
+  (case download-mode
+    :async `[init-handler check-cache-handler download-handler store-cache-handler process-handler split-handler]
+    :sync  `[init-handler sync-download-handler store-cache-handler process-handler sync-split-handler]))
 
 (defn compose-sync-handlers
   ([h] h)
@@ -235,13 +228,16 @@
             ::current-processor (@processors (:processor context))
             ::cache-key (cache-key-fn context))]))
 
-(defn check-cache-handler [context options]
+(defn maybe-retrieve-from-http-cache [context options]
   (if-let [key (::cache-key context)]
     (if-let [item (cache/load-blob (:html-cache options) key)]
-      [(assoc context
-              ::response {:body (:blob item), :headers (:meta item)}
-              ::next-stage `process-handler)]
-      [context])
+      {:body (:blob item), :headers (:meta item)})))
+
+(defn check-cache-handler [context options]
+  (if-let [cached-response (maybe-retrieve-from-http-cache context options)]
+    [(assoc context
+            ::response cached-response
+            ::next-stage `process-handler)]
     [context]))
 
 (defn download-handler [context {:keys [pipeline connection-manager download-semaphore retries] :as options} callback]
@@ -286,9 +282,11 @@
                        http/request)]
     (try
       (infof "[download] Downloading %s" (describe context))
-      (let [resp (http/with-additional-middleware [http/wrap-lower-case-headers]
-                   (request-fn req))]
-        (debugf "[download] Downloaded %s" (describe context))
+      (let [cached (maybe-retrieve-from-http-cache context options)
+            resp (or cached
+                     (http/with-additional-middleware [http/wrap-lower-case-headers]
+                       (request-fn req)))]
+        (debugf "[download] %s %s" (if cached "Retrieved from cache:" "Downloaded:") (describe context))
         [(cond-> context
            true (assoc ::response resp)
            (:cookies resp) (update :http/cookies merge (:cookies resp)))])
