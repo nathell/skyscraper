@@ -343,12 +343,14 @@
 
 (def default-options
   {:max-connections 10,
-   :timeout 60000,
    :retries 5,
    :conn-mgr-options {},
    :parse-fn enlive-parse,
    :download-mode :async,
-   :http-options {:redirect-strategy :lax, :as :byte-array}})
+   :http-options {:redirect-strategy :lax,
+                  :as :byte-array,
+                  :socket-timeout 30000,
+                  :connection-timeout 30000}})
 
 (defn initialize-options
   [options]
