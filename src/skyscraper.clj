@@ -89,14 +89,14 @@
   [name & {:as args}]
   (swap! processors assoc name (merge {:name name} args)))
 
-(defn ensure-seq [x]
-  (if (map? x) [x] (doall x)))
+(defn ensure-distinct-seq [x]
+  (if (map? x) [x] (doall (distinct x))))
 
 (defn run-processor
   ([processor-name document] (run-processor processor-name document {}))
   ([processor-name document context]
    (let [processor (@processors processor-name)]
-     (ensure-seq ((:process-fn processor) document context)))))
+     (ensure-distinct-seq ((:process-fn processor) document context)))))
 
 (defn dissoc-internal [ctx]
   (let [removed-keys #{:processor :url ::new-items}]
@@ -124,7 +124,7 @@
   (if-let [only (:only options)]
     (let [filter-fn (if (fn? only)
                       only
-                      (fn [x] (some #(allows? % x) (ensure-seq only))))]
+                      (fn [x] (some #(allows? % x) (ensure-distinct-seq only))))]
       (filter filter-fn contexts))
     contexts))
 
@@ -311,7 +311,7 @@
           {:keys [headers body]} (::response context)
           document (parse headers body)
           processor-name (:processor context)
-          result (ensure-seq (run-processor processor-name document context))]
+          result (run-processor processor-name document context)]
       (cache/save-blob (:processed-cache options) (::cache-key context) (.getBytes (pr-str result)) nil)
       [(assoc context ::new-items (map (partial merge-contexts context) result))])))
 
@@ -333,7 +333,7 @@
     (map (partial advance-pipeline (:pipeline options)) results)))
 
 (defn initialize-seed [{:keys [download-mode pipeline] :as options} seed]
-  (let [seed (ensure-seq seed)]
+  (let [seed (ensure-distinct-seq seed)]
     (case download-mode
       :async (mapv #(advance-pipeline pipeline %) seed)
       :sync (mapv #(assoc %
