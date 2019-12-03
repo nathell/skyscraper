@@ -18,6 +18,11 @@
   ([processor initial-url] [{:processor processor
                              :url (str "http://localhost:" port initial-url)}]))
 
+(def srv (atom nil))
+
+(defn start-server [handler]
+  (reset! srv (run-jetty handler {:port port, :join? false})))
+
 (defmacro with-server [handler & body]
   `(let [server# (run-jetty ~handler {:port port, :join? false})]
      (try
