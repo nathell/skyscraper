@@ -1,5 +1,6 @@
 (ns skyscraper.real-test
   (:require
+    [clojure.java.jdbc :as jdbc]
     [clojure.test :as test :refer [deftest is]]
     [hiccup.page :refer [html5]]
     [net.cgrand.enlive-html :refer [select text]]
@@ -116,3 +117,45 @@
     (with-server nondistinct-test-handler
       (is (= (scrape seed)
              [{:item "Item"}])))))
+
+;; db-self-pointing-test
+
+(defn db-self-pointing-test-items [start end]
+  [:ul
+   (for [i (range start (inc end))]
+     [:li "Item " i])])
+
+(defn db-self-pointing-test-handler [{:keys [uri]}]
+  (condp = uri
+    "/" (resp-page [:a {:href "/page2"} "Page 2"]
+                   (db-self-pointing-test-items 1 3))
+    "/page2" (resp-page (db-self-pointing-test-items 4 5))
+    {:status 404}))
+
+(defprocessor :db-self-pointing-test-items
+  :db-columns [:item]
+  :id [:item]
+  :process-fn (fn [res ctx]
+                (concat
+                 (for [a (select res [:a])]
+                  {:url (href a),
+                   :processor :db-self-pointing-test-items})
+                 (for [li (select res [:li])]
+                   {:item (text li)}))))
+
+(deftest db-self-pointing-test
+  (with-server db-self-pointing-test-handler
+    (let [db-file (java.io.File/createTempFile "test" ".sqlite")
+          db-uri (str "jdbc:sqlite:" db-file)]
+      (try
+        (scrape! (make-seed :db-self-pointing-test-items)
+                 :db-file db-file)
+        (jdbc/with-db-connection [conn db-uri]
+          (is (= (jdbc/query conn "SELECT count(*) cnt FROM db_self_pointing_test_items")
+                 [{:cnt 6}]))
+          (is (= (jdbc/query conn "SELECT item FROM db_self_pointing_test_items WHERE parent IS NULL ORDER BY item")
+                 [{:item nil} {:item "Item 1"} {:item "Item 2"} {:item "Item 3"}]))
+          (is (= (jdbc/query conn "SELECT item FROM db_self_pointing_test_items WHERE parent IS NOT NULL ORDER BY item")
+                 [{:item "Item 4"} {:item "Item 5"}])))
+        (finally
+          (.delete db-file))))))

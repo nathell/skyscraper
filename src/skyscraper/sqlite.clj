@@ -43,25 +43,46 @@
 (defn all-nils? [id context]
   (every? nil? (map context id)))
 
-(defn ensure-types! [columns ctxs]
-  (doseq [ctx ctxs
-          [k v] ctx
+(defn ensure-types-single [columns context]
+  (doseq [[k v] context
           :when (contains? columns k)
           :let [check (if (= k :parent) int? #(or (nil? %) (string? %)))]
           :when (not (check v))]
-    (warnf "[sqlite] Wrong type for key %s" k)))
+    (warnf "[sqlite] Wrong type for key %s, value %s" k v))
+  (doseq [column columns
+          :when (and (not= column :parent)
+                     (not (contains? context column)))]
+    (warnf "[sqlite] Context contains no value for key %s: %s" column context))
+  (merge (zipmap columns (repeat nil))
+         context))
+
+(defn ensure-types [columns ctxs]
+  (mapv (partial ensure-types-single columns) ctxs))
+
+(defn separate-by
+  "Returns [matching non-matching], where matching is a vector of
+  (f x) for x in coll, and non-matching is a vector of x's such that
+  (f x) returns nil."
+  [f coll]
+  (reduce (fn [[matching non-matching] x]
+            (if-let [res (f x)]
+              [(conj matching res) non-matching]
+              [matching (conj non-matching x)]))
+          [[] []]
+          coll))
 
 (defn insert-all! [db name id columns ctxs]
-  (ensure-types! (set columns) ctxs)
-  (let [name (db-column-name name)
-        ctxs (if id
-               (remove (partial all-nils? id) ctxs)
-               ctxs)
+  (let [ctxs (ensure-types (set columns) ctxs)
+        name (db-column-name name)
         existing (when id (try (map normalize-keys (query db name id ctxs))
                                (catch org.sqlite.SQLiteException e nil)))
         existing-ids (into {} (map (fn [r] [(select-keys r id) (:id r)])) existing)
-        contexts-to-preserve (for [ctx ctxs :let [id (existing-ids (select-keys ctx id))] :when id] (assoc ctx :parent id))
-        new-contexts (remove #(contains? existing-ids (select-keys % id)) ctxs)
+        [contexts-to-preserve new-contexts] (separate-by (fn [ctx]
+                                                           (let [existing-id (existing-ids (select-keys ctx id))]
+                                                             (cond
+                                                               existing-id (assoc ctx :parent existing-id)
+                                                               :else nil)))
+                                                         ctxs)
         to-insert (map (partial db-row columns) new-contexts)
         try-inserting (fn []
                         (let [ids (map rowid (locking db (jdbc/insert-multi! db name to-insert)))]
