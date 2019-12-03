@@ -9,6 +9,7 @@
     [net.cgrand.enlive-html :as enlive]
     [reaver]
     [skyscraper.cache :as cache]
+    [skyscraper.context :as context]
     [skyscraper.sqlite :as sqlite]
     [skyscraper.traverse :as traverse]
     [taoensso.timbre :refer [debugf infof warnf errorf]])
@@ -98,18 +99,6 @@
    (let [processor (@processors processor-name)]
      (ensure-distinct-seq ((:process-fn processor) document context)))))
 
-(defn dissoc-internal [ctx]
-  (let [removed-keys #{:processor :url ::new-items}]
-    (into {}
-          (remove (fn [[k _]] (or (contains? removed-keys k)
-                                  (and (keyword? k)
-                                       (= (namespace k) "http")
-                                       (not= k :http/cookies)))))
-          ctx)))
-
-(defn dissoc-leaf-keys [context]
-  (dissoc context ::stage ::next-stage ::current-processor ::traverse/handler ::traverse/call-protocol ::response ::cache-key :http/cookies))
-
 (defn allows?
   "True if all keys in m1 that are also in m2 have equal values in both maps."
   [m1 m2]
@@ -138,7 +127,7 @@
     (str (URL. (URL. url) new-url))))
 
 (defn merge-contexts [old new]
-  (let [preserve (dissoc-internal old)
+  (let [preserve (context/dissoc-internal old)
         new-url (if-let [u (:url new)]
                   (merge-urls (:url old) u))
         new (if new-url
@@ -217,7 +206,7 @@
                  ::traverse/call-protocol (if (= next-stage `download-handler)
                                             :callback
                                             :sync)))
-      (dissoc-leaf-keys context))))
+      (context/dissoc-leaf-keys context))))
 
 (defn init-handler [context options]
   (let [{:keys [cache-template cache-key-fn]} (merge options (@processors (:processor context)))
@@ -325,7 +314,7 @@
        (filter-contexts options)
        (map #(if (and (:processor %) (:url %))
                %
-               (dissoc-leaf-keys %)))))
+               (context/dissoc-leaf-keys %)))))
 
 (defn sync-handler [context options]
   (let [f (ns-resolve *ns* (::stage context))
