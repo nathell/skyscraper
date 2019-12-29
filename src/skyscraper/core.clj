@@ -1,4 +1,4 @@
-(ns skyscraper
+(ns skyscraper.core
   (:require
     [clj-http.client :as http]
     [clj-http.conn-mgr :as http-conn]

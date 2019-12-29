@@ -7,7 +7,7 @@
     [ring.adapter.jetty :refer [run-jetty]]
     [ring.middleware.cookies :refer [wrap-cookies]]
     [ring.util.response :as response]
-    [skyscraper :refer :all]
+    [skyscraper.core :refer :all]
     [skyscraper.helpers :refer [href]]
     [taoensso.timbre :as timbre]))
 

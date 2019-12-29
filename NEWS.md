@@ -5,6 +5,7 @@
 - Skyscraper has been rewritten from scratch to be asynchronous and multithreaded,
   based on [core.async].  See [doc/multithread.md] for details.
 - Backwards-incompatible API changes:
+  - The `skyscraper` namespace has been renamed to `skyscraper.core`.
   - Processors are now named by keywords.
     - `defprocessor` now takes a keyword name, and registers a function in the
       global registry instead of defining it. This means that it’s no longer possible

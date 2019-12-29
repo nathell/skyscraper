@@ -2,8 +2,8 @@
 
 (ns skyscraper.cache
   (:refer-clojure :exclude [load load-string])
-  (:require [clojure.java.io :as io]
-            [clojure.edn :as edn])
+  (:require [clojure.edn :as edn]
+            [clojure.java.io :as io])
   (:import [java.io InputStream OutputStream]))
 
 ;;; Netstrings
@@ -39,7 +39,7 @@
   "Provides facilities for caching downloaded blobs (typically HTML),
    potentially enriched with some metadata (typically headers), in
    some kind of storage. Implementations of this protocol can be passed
-   as :html-cache and :processed-cache options to `skyscraper/scrape`."
+   as :html-cache and :processed-cache options to `skyscraper.core/scrape`."
   (save-blob [cache key blob metadata])
   (load-blob [cache key]))
 

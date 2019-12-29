@@ -102,7 +102,7 @@
 (defn maybe-store-in-db [db {:keys [name db-columns id] :as q} contexts]
   (if (and db db-columns)
     (let [db-columns (distinct (conj db-columns :parent))
-          [skipped inserted] (separate :skyscraper/db-skip contexts)
+          [skipped inserted] (separate :skyscraper.core/db-skip contexts)
           new-items (insert-all! db name id db-columns inserted)]
       (into (vec skipped) new-items))
     contexts))
@@ -111,7 +111,7 @@
   (jdbc/with-db-transaction [db db]
     (loop []
       (when-let [item (async/<!! enhancer-input-chan)]
-        (let [new-items (:skyscraper/new-items item)
-              updated (maybe-store-in-db db (:skyscraper/current-processor item) new-items)]
-          (async/>!! enhancer-output-chan (assoc item :skyscraper/new-items updated)))
+        (let [new-items (:skyscraper.core/new-items item)
+              updated (maybe-store-in-db db (:skyscraper.core/current-processor item) new-items)]
+          (async/>!! enhancer-output-chan (assoc item :skyscraper.core/new-items updated)))
         (recur)))))

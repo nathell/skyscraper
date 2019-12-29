@@ -5,8 +5,8 @@
             [clojure.string :as string]
             [clojure.test :refer :all]
             [net.cgrand.enlive-html :refer [select text]]
-            [skyscraper :refer :all]
             [skyscraper.cache :as cache]
+            [skyscraper.core :refer :all]
             [skyscraper.helpers :refer [href]]
             [taoensso.timbre :as timbre]))
 

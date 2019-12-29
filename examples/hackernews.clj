@@ -3,7 +3,7 @@
 (ns skyscraper.hackernews
   (:require
     [net.cgrand.enlive-html :refer [select attr? text emit* has pred first-child last-child nth-child]]
-    [skyscraper :refer :all]
+    [skyscraper.core :refer :all]
     [skyscraper.helpers :refer [href]]))
 
 (defn seed [& _]
