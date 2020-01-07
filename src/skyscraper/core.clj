@@ -62,6 +62,10 @@
 
 (defonce processors (atom {}))
 
+(defn default-process-fn
+  [resource context]
+  [{::unimplemented true, ::resource resource, ::context context}])
+
 (defn defprocessor
   "Registers a processor named `name` with arguments `args`.
 
@@ -88,7 +92,7 @@
     parsing.
   - `:db-columns` – a vector of keys that are supposed to exist."
   [name & {:as args}]
-  (swap! processors assoc name (merge {:name name} args)))
+  (swap! processors assoc name (merge {:name name, :process-fn default-process-fn} args)))
 
 (defn ensure-distinct-seq [x]
   (if (map? x) [x] (doall (distinct x))))
@@ -96,7 +100,8 @@
 (defn run-processor
   ([processor-name document] (run-processor processor-name document {}))
   ([processor-name document context]
-   (let [processor (@processors processor-name)]
+   (let [processor (or (@processors processor-name)
+                       {:name processor-name, :process-fn default-process-fn})]
      (ensure-distinct-seq ((:process-fn processor) document context)))))
 
 (defn allows?
