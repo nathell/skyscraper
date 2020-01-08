@@ -235,6 +235,7 @@
     [context]))
 
 (defn download-handler [context {:keys [pipeline connection-manager download-semaphore retries] :as options} callback]
+  (debugf "Running download-handler: %s" (:processor context))
   (let [req (merge {:method :get, :url (:url context)}
                    (extract-namespaced-keys "http" context))
         success-fn (fn [resp]
@@ -322,6 +323,7 @@
                (context/dissoc-leaf-keys %)))))
 
 (defn sync-handler [context options]
+  (debugf "Running sync-handler: %s %s" (::stage context) (:processor context))
   (let [f (ns-resolve *ns* (::stage context))
         results (f context options)]
     (map (partial advance-pipeline (:pipeline options)) results)))
