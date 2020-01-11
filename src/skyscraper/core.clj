@@ -10,7 +10,7 @@
     [reaver]
     [skyscraper.cache :as cache]
     [skyscraper.context :as context]
-    [skyscraper.sqlite :as sqlite]
+    [skyscraper.db :as sqlite]
     [skyscraper.traverse :as traverse]
     [taoensso.timbre :refer [debugf infof warnf errorf]])
   (:import [java.net URL]

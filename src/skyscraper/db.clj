@@ -1,4 +1,4 @@
-(ns skyscraper.sqlite
+(ns skyscraper.db
   (:require
     [clojure.core.async :as async]
     [clojure.core.strint :refer [<<]]
