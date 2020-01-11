@@ -140,9 +140,6 @@
               new)]
     (merge preserve new)))
 
-(defn describe [ctx]
-  (:url ctx))
-
 (defn string-resource
   "Returns an Enlive resource for a HTML snippet passed as a string."
   [s]
@@ -200,7 +197,7 @@
                        (when (and (:processor context) (:url context))
                          (first pipeline)))]
     (when (and (:processor context) (not (:url context)))
-      (warnf "Encountered context with processor but no URL: %s" (pr-str context)))
+      (warnf "Encountered context with processor but no URL: %s" (context/describe context)))
     (if next-stage
       (-> context
           (dissoc ::next-stage)
@@ -239,7 +236,7 @@
   (let [req (merge {:method :get, :url (:url context)}
                    (extract-namespaced-keys "http" context))
         success-fn (fn [resp]
-                     (debugf "[download] Downloaded %s" (describe context))
+                     (debugf "[download] Downloaded %s" (:url context))
                      (.release download-semaphore)
                      (callback
                       [(cond-> (advance-pipeline pipeline context)
@@ -251,14 +248,14 @@
                      (callback
                       [(if (< retry (:retries options))
                           (do
-                            (warnf "[download] Unexpected error %s, retry %s, context %s" error retry context)
+                            (warnf "[download] Unexpected error %s, retry %s, context %s" error retry (context/describe context))
                             (assoc context ::retry retry))
                           (do
-                            (warnf "[download] Unexpected error %s, giving up, context %s" error context)
+                            (warnf "[download] Unexpected error %s, giving up, context %s" error (context/describe context))
                             {::error error, ::context context}))])))]
     (debugf "[download] Waiting")
     (.acquire download-semaphore)
-    (infof "[download] Downloading %s" (describe context))
+    (infof "[download] Downloading %s" (:url context))
     (let [req (merge {:async? true,
                       :connection-manager connection-manager}
                      req (:http-options options))
@@ -276,12 +273,12 @@
         request-fn (or (:request-fn options)
                        http/request)]
     (try
-      (infof "[download] Downloading %s" (describe context))
+      (infof "[download] Downloading %s" (:url context))
       (let [cached (maybe-retrieve-from-http-cache context options)
             resp (or cached
                      (http/with-additional-middleware [http/wrap-lower-case-headers]
                        (request-fn req)))]
-        (debugf "[download] %s %s" (if cached "Retrieved from cache:" "Downloaded:") (describe context))
+        (debugf "[download] %s %s" (if cached "Retrieved from cache:" "Downloaded:") (:url context))
         [(cond-> context
            true (assoc ::response resp)
            (:cookies resp) (update :http/cookies merge (:cookies resp)))])
@@ -289,10 +286,10 @@
         (let [retry (inc (or (::retry context) 0))]
           [(if (< retry (:retries options))
              (do
-               (warnf "[download] Unexpected error %s, retry %s, context %s" error retry context)
+               (warnf "[download] Unexpected error %s, retry %s, context %s" error retry (context/describe context))
                (assoc context ::retry retry))
              (do
-               (warnf "[download] Unexpected error %s, giving up, context %s" error context)
+               (warnf "[download] Unexpected error %s, giving up, context %s" error (context/describe context))
                {::error error, ::context context}))])))))
 
 (defn store-cache-handler [context options]

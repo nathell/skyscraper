@@ -4,6 +4,7 @@
     [clojure.core.strint :refer [<<]]
     [clojure.java.jdbc :as jdbc]
     [clojure.string :as string]
+    [skyscraper.context :as context]
     [skyscraper.data :refer [separate]]
     [taoensso.timbre :refer [debugf warnf]]))
 
@@ -52,7 +53,7 @@
   (doseq [column columns
           :when (and (not= column :parent)
                      (not (contains? context column)))]
-    (warnf "[sqlite] Context contains no value for key %s: %s" column context))
+    (warnf "[sqlite] Context contains no value for key %s: %s" column (context/describe context)))
   (merge (zipmap columns (repeat nil))
          context))
 
