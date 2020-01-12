@@ -49,11 +49,11 @@
           :when (contains? columns k)
           :let [check (if (= k :parent) int? #(or (nil? %) (string? %)))]
           :when (not (check v))]
-    (warnf "[sqlite] Wrong type for key %s, value %s" k v))
+    (warnf "Wrong type for key %s, value %s" k v))
   (doseq [column columns
           :when (and (not= column :parent)
                      (not (contains? context column)))]
-    (warnf "[sqlite] Context contains no value for key %s: %s" column (context/describe context)))
+    (warnf "Context contains no value for key %s: %s" column (context/describe context)))
   (merge (zipmap columns (repeat nil))
          context))
 
@@ -88,7 +88,7 @@
         try-inserting (fn []
                         (let [ids (map rowid (locking db (jdbc/insert-multi! db name to-insert)))]
                           (mapv #(assoc %1 :parent %2) new-contexts ids)))]
-    (debugf "[sqlite] Got %s, existing %s, inserting %s" (count ctxs) (count existing-ids) (count to-insert))
+    (debugf "Got %s, existing %s, inserting %s" (count ctxs) (count existing-ids) (count to-insert))
     (let [inserted (try
                      (try-inserting)
                      (catch org.sqlite.SQLiteException e
@@ -97,7 +97,7 @@
                            (create-table db name columns)
                            (try-inserting))
                          (throw e))))]
-      (debugf "[sqlite] Returning %s" (count (into contexts-to-preserve inserted)))
+      (debugf "Returning %s" (count (into contexts-to-preserve inserted)))
       (into contexts-to-preserve inserted))))
 
 (defn maybe-store-in-db [db {:keys [name db-columns id] :as q} contexts]
