@@ -8,6 +8,7 @@
             [skyscraper.cache :as cache]
             [skyscraper.core :refer :all]
             [skyscraper.helpers :refer [href]]
+            [skyscraper.test-utils :refer [with-temporary-sqlite-db]]
             [taoensso.timbre :as timbre]))
 
 (defn dummy-site-content
@@ -154,19 +155,14 @@
   :id [:bank-account])
 
 (deftest test-sqlite
-  (let [db-file (java.io.File/createTempFile "test" ".sqlite")
-        db-uri (str "jdbc:sqlite:" db-file)]
-    (try
-      (dotimes [_ 2]
-        (scrape! [{:url "http://example.com", :processor :users}]
-                 :request-fn mock-request
-                 :db-file db-file))
-      (jdbc/with-db-connection [conn db-uri]
-        (is (= (->> (jdbc/query conn "SELECT name, surname, bank_account FROM accounts JOIN users ON accounts.parent = users.id")
-                    (sort-by :bank_account))
-               [{:name "John", :surname "Doe", :bank_account "0123-4567"}
-                {:name "John", :surname "Doe", :bank_account "8888-9999"}]))
-        (is (= (jdbc/query conn "SELECT count(*) cnt FROM accounts")
-               [{:cnt 2}])))
-      (finally
-        (.delete db-file)))))
+  (with-temporary-sqlite-db conn
+    (dotimes [_ 2]
+      (scrape! [{:url "http://example.com", :processor :users}]
+               :request-fn mock-request
+               :db (:connection-uri conn)))
+    (is (= (->> (jdbc/query conn "SELECT name, surname, bank_account FROM accounts JOIN users ON accounts.parent = users.id")
+                (sort-by :bank_account))
+           [{:name "John", :surname "Doe", :bank_account "0123-4567"}
+            {:name "John", :surname "Doe", :bank_account "8888-9999"}]))
+    (is (= (jdbc/query conn "SELECT count(*) cnt FROM accounts")
+           [{:cnt 2}]))))
