@@ -149,18 +149,19 @@
                    {:item (text li)}))))
 
 (deftest db-self-pointing-test
-  (with-server db-self-pointing-test-handler
-    (let [db-file (java.io.File/createTempFile "test" ".sqlite")
-          db-uri (str "jdbc:sqlite:" db-file)]
-      (try
-        (scrape! (make-seed :db-self-pointing-test-items)
-                 :db-file db-file)
-        (jdbc/with-db-connection [conn db-uri]
-          (is (= (jdbc/query conn "SELECT count(*) cnt FROM db_self_pointing_test_items")
-                 [{:cnt 6}]))
-          (is (= (jdbc/query conn "SELECT item FROM db_self_pointing_test_items WHERE parent IS NULL ORDER BY item")
-                 [{:item nil} {:item "Item 1"} {:item "Item 2"} {:item "Item 3"}]))
-          (is (= (jdbc/query conn "SELECT item FROM db_self_pointing_test_items WHERE parent IS NOT NULL ORDER BY item")
-                 [{:item "Item 4"} {:item "Item 5"}])))
-        (finally
-          (.delete db-file))))))
+  (dotimes [_ 50]
+    (with-server db-self-pointing-test-handler
+      (let [db-file (java.io.File/createTempFile "test" ".sqlite")
+            db-uri (str "jdbc:sqlite:" db-file)]
+        (try
+          (scrape! (make-seed :db-self-pointing-test-items)
+                   :db-file db-file)
+          (jdbc/with-db-connection [conn db-uri]
+            (is (= (jdbc/query conn "SELECT count(*) cnt FROM db_self_pointing_test_items")
+                   [{:cnt 6}]))
+            (is (= (jdbc/query conn "SELECT item FROM db_self_pointing_test_items WHERE parent IS NULL ORDER BY item")
+                   [{:item nil} {:item "Item 1"} {:item "Item 2"} {:item "Item 3"}]))
+            (is (= (jdbc/query conn "SELECT item FROM db_self_pointing_test_items WHERE parent IS NOT NULL ORDER BY item")
+                   [{:item "Item 4"} {:item "Item 5"}])))
+          (finally
+            (.delete db-file)))))))
