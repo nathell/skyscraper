@@ -218,10 +218,11 @@
     (governor options seed channels)
     (dotimes [i parallelism]
       (worker options i channels))
-    (when enhancer
-      (thread
-        (enhancer options channels)))
-    channels))
+    (cond-> channels
+      enhancer (assoc :enhancer-terminate-chan
+                      (thread
+                        (enhancer options channels)
+                        nil)))))
 
 (defn wait!
   "Waits until the scraping process is complete."
@@ -232,8 +233,10 @@
   "Closes channels used by the traversal process. Call this function
   after `wait!` returns."
   [channels]
-  (doseq [ch (vals channels) :when ch]
+  (doseq [[k ch] channels :when (and ch (not= k :enhancer-terminate-chan))]
     (close! ch))
+  (when-let [ch (:enhancer-terminate-chan channels)]
+    (<!! ch))
   nil)
 
 (defn traverse!
