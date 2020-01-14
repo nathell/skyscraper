@@ -72,7 +72,11 @@
           [[] []]
           coll))
 
-(defn insert-all! [db name id columns ctxs]
+(defn insert-all!
+  "Inserts new contexts into a given db table. If `id` (a vector of column names)
+  is provided, checks for the presence of matching contexts in DB and only inserts those
+  that were not present."
+  [db name id columns ctxs]
   (let [ctxs (ensure-types (set columns) ctxs)
         name (db-column-name name)
         existing (when id (try (map normalize-keys (query db name id ctxs))
