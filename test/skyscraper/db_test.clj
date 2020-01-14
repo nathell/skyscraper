@@ -7,7 +7,8 @@
 
 (deftest test-insert-all!
   (let [example-data [{:name "John", :surname "Doe", :phone "123-45-67"}
-                      {:name "Donald", :surname "Covfefe", :phone "666-66-66"}]]
+                      {:name "Donald", :surname "Covfefe", :phone "666-66-66"}]
+        update [{:name "John", :surname "Doe", :phone "765-43-21"}]]
     (testing "basic usecase"
       (with-temporary-sqlite-db db
         (db/insert-all! db :example-data nil [:name :surname :phone] example-data)
@@ -24,4 +25,10 @@
           (dotimes [_ 5]
             (db/insert-all! db :example-data [:name :surname] [:name :surname :phone] example-data))
           (is (= (jdbc/query db "SELECT count(*) cnt FROM example_data")
-                 [{:cnt 2}])))))))
+                 [{:cnt 2}])))))
+    (testing "updates"
+      (with-temporary-sqlite-db db
+        (doseq [data [example-data update]]
+          (db/insert-all! db :example-data [:name :surname] [:name :surname :phone] data))
+        (is (= (jdbc/query db "SELECT name, surname, phone FROM example_data ORDER BY id")
+               [(first update) (second example-data)]))))))
