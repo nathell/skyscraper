@@ -8,7 +8,7 @@
     [skyscraper.data :refer [separate]]
     [taoensso.timbre :refer [debugf warnf]]))
 
-(defn db-column-name [col]
+(defn db-name [col]
   (string/replace (name col) "-" "_"))
 
 (defn normalize-keys [m]
@@ -18,7 +18,7 @@
 
 (defn db-row [columns context]
   (into {}
-        (map (fn [[k v]] [(db-column-name k) v]))
+        (map (fn [[k v]] [(db-name k) v]))
         (select-keys context columns)))
 
 (defn create-table [db name columns]
@@ -29,15 +29,15 @@
     (into [[:id :integer "primary key"]
            [:parent :integer]]
           (for [col columns :when (not= col :parent)]
-            [(db-column-name col) :text])))))
+            [(db-name col) :text])))))
 
 (def rowid (keyword "last_insert_rowid()"))
 
 (defn query [db name id ctxs]
-  (let [id-part (string/join ", " (map db-column-name id))
+  (let [id-part (string/join ", " (map db-name id))
         values-1 (str "(" (string/join ", " (repeat (count id) "?")) ")")
         values (string/join ", " (repeat (count ctxs) values-1))
-        query (<< "select * from ~(db-column-name name) where (~{id-part}) in (values~{values})")
+        query (<< "select * from ~(db-name name) where (~{id-part}) in (values~{values})")
         params (mapcat (apply juxt id) ctxs)]
     (jdbc/query db (into [query] params))))
 
@@ -73,17 +73,19 @@
           coll))
 
 (defn insert-all!
-  "Inserts new contexts into a given db table. If `id` (a vector of column names)
-  is provided, checks for the presence of matching contexts in DB and only inserts those
-  that were not present."
-  [db name id columns ctxs]
+  "Inserts new contexts into a given db table, returning them augmented
+  with the `:id` fields corresponding to the DB-generated primary
+  keys.  If `key-columns` (a vector of column names) is provided,
+  checks for the presence of matching contexts in DB and only inserts
+  those that were not present."
+  [db table key-columns columns ctxs]
   (let [ctxs (ensure-types (set columns) ctxs)
-        name (db-column-name name)
-        existing (when id (try (map normalize-keys (query db name id ctxs))
-                               (catch org.sqlite.SQLiteException e nil)))
-        existing-ids (into {} (map (fn [r] [(select-keys r id) (:id r)])) existing)
+        name (db-name table)
+        existing (when key-columns (try (map normalize-keys (query db name key-columns ctxs))
+                                        (catch org.sqlite.SQLiteException e nil)))
+        existing-ids (into {} (map (fn [r] [(select-keys r key-columns) (:id r)])) existing)
         [contexts-to-preserve new-contexts] (separate-by (fn [ctx]
-                                                           (let [existing-id (existing-ids (select-keys ctx id))]
+                                                           (let [existing-id (existing-ids (select-keys ctx key-columns))]
                                                              (cond
                                                                existing-id (assoc ctx :parent existing-id)
                                                                :else nil)))
