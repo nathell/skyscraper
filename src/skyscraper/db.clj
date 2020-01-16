@@ -3,6 +3,7 @@
     [clojure.core.async :as async]
     [clojure.core.strint :refer [<<]]
     [clojure.java.jdbc :as jdbc]
+    [clojure.set :as set]
     [clojure.string :as string]
     [skyscraper.context :as context]
     [skyscraper.data :refer [separate]]
@@ -21,25 +22,60 @@
         (map (fn [[k v]] [(db-name k) v]))
         (select-keys context columns)))
 
-(defn create-table [db name columns]
-  (jdbc/execute!
-   db
-   (jdbc/create-table-ddl
-    name
-    (into [[:id :integer "primary key"]
-           [:parent :integer]]
-          (for [col columns :when (not= col :parent)]
-            [(db-name col) :text])))))
+(defn create-index-ddl [table-name key-column-names]
+  (let [index-name (str "idx_" table-name)]
+    (str "CREATE UNIQUE INDEX " index-name " ON " table-name " (" (string/join ", " key-column-names) ")")))
+
+(defn create-table [db table-name column-names key-column-names]
+  (jdbc/execute! db
+                 (jdbc/create-table-ddl
+                  table-name
+                  (into [["id" :integer "primary key"]
+                         ["parent" :integer]]
+                        (for [col column-names :when (not= col "parent")]
+                          [col :text]))))
+  (when key-column-names
+    (jdbc/execute! db
+                   (create-index-ddl table-name key-column-names))))
 
 (def rowid (keyword "last_insert_rowid()"))
 
-(defn query [db name id ctxs]
+(defn query [db table-name id ctxs]
   (let [id-part (string/join ", " (map db-name id))
         values-1 (str "(" (string/join ", " (repeat (count id) "?")) ")")
         values (string/join ", " (repeat (count ctxs) values-1))
-        query (<< "select * from ~(db-name name) where (~{id-part}) in (values~{values})")
+        query (<< "select * from ~{table-name} where (~{id-part}) in (values~{values})")
         params (mapcat (apply juxt id) ctxs)]
-    (jdbc/query db (into [query] params))))
+    (map normalize-keys
+         (jdbc/query db (into [query] params)))))
+
+(defn- upsert-multi-row-sql
+  [table-name column-names key-column-names values]
+  (let [nc (count column-names)
+        vcs (map count values)
+        non-key-column-names (vec (set/difference (set column-names) (set key-column-names)))]
+    (if (not (and (or (zero? nc) (= nc (first vcs))) (apply = vcs)))
+      (throw (IllegalArgumentException. "insert! called with inconsistent number of columns / values"))
+      (into [(str "INSERT INTO " table-name " (" (string/join ", " column-names)
+                  ") VALUES (" (string/join ", " (repeat (first vcs) "?"))
+                  ") ON CONFLICT (" (string/join ", " key-column-names)
+                  ") DO UPDATE SET " (string/join ", " (map #(str % " = excluded." %) non-key-column-names)))]
+            values))))
+
+(defn upsert-multi! [db table-name column-names key-column-names rows]
+  (jdbc/db-do-prepared db false
+                       (upsert-multi-row-sql table-name column-names key-column-names rows)
+                       {:multi? true}))
+
+(defn upsert-multi-ensure-table! [db table-name column-names key-column-names rows]
+  (try
+    (upsert-multi! db table-name column-names key-column-names rows)
+    (catch org.sqlite.SQLiteException e
+      (if (re-find #"no such table" (.getMessage e))
+        (do
+          (create-table db table-name column-names key-column-names)
+          (upsert-multi! db table-name column-names key-column-names rows))
+        (throw e)))))
 
 (defn all-nils? [id context]
   (every? nil? (map context id)))
@@ -79,32 +115,20 @@
   checks for the presence of matching contexts in DB and only inserts
   those that were not present."
   [db table key-columns columns ctxs]
+  (debugf "Upserting %s rows" (count ctxs))
   (let [ctxs (ensure-types (set columns) ctxs)
-        name (db-name table)
-        existing (when key-columns (try (map normalize-keys (query db name key-columns ctxs))
-                                        (catch org.sqlite.SQLiteException e nil)))
-        existing-ids (into {} (map (fn [r] [(select-keys r key-columns) (:id r)])) existing)
-        [contexts-to-preserve new-contexts] (separate-by (fn [ctx]
-                                                           (let [existing-id (existing-ids (select-keys ctx key-columns))]
-                                                             (cond
-                                                               existing-id (assoc ctx :parent existing-id)
-                                                               :else nil)))
-                                                         ctxs)
-        to-insert (map (partial db-row columns) new-contexts)
-        try-inserting (fn []
-                        (let [ids (map rowid (locking db (jdbc/insert-multi! db name to-insert)))]
-                          (mapv #(assoc %1 :parent %2) new-contexts ids)))]
-    (debugf "Got %s, existing %s, inserting %s" (count ctxs) (count existing-ids) (count to-insert))
-    (let [inserted (try
-                     (try-inserting)
-                     (catch org.sqlite.SQLiteException e
-                       (if (re-find #"no such table" (.getMessage e))
-                         (do
-                           (create-table db name columns)
-                           (try-inserting))
-                         (throw e))))]
-      (debugf "Returning %s" (count (into contexts-to-preserve inserted)))
-      (into contexts-to-preserve inserted))))
+        table-name (db-name table)
+        column-names (mapv db-name columns)
+        key-column-names (mapv db-name key-columns)
+        rows (map (apply juxt columns) ctxs)
+        _ (upsert-multi-ensure-table! db table-name column-names key-column-names rows)
+        inserted-rows (query db table-name key-columns ctxs)
+        inserted-row-ids (into {}
+                               (map (fn [r] [(select-keys r key-columns) (:id r)]))
+                               inserted-rows)]
+    (map (fn [ctx]
+           (assoc ctx :parent (get inserted-row-ids (select-keys ctx key-columns))))
+         ctxs)))
 
 (defn maybe-store-in-db [db {:keys [name db-columns id] :as q} contexts]
   (if (and db db-columns)
