@@ -9,24 +9,19 @@
     [skyscraper.data :refer [separate]]
     [taoensso.timbre :refer [debugf warnf]]))
 
-(defn db-name [col]
+(defn- db-name [col]
   (string/replace (name col) "-" "_"))
 
-(defn normalize-keys [m]
+(defn- create-index-ddl [table-name key-column-names]
+  (let [index-name (str "idx_" table-name)]
+    (str "CREATE UNIQUE INDEX " index-name " ON " table-name " (" (string/join ", " key-column-names) ")")))
+
+(defn- normalize-keys [m]
   (into {}
         (map (fn [[k v]] [(keyword (string/replace (name k) "_" "-")) v]))
         m))
 
-(defn db-row [columns context]
-  (into {}
-        (map (fn [[k v]] [(db-name k) v]))
-        (select-keys context columns)))
-
-(defn create-index-ddl [table-name key-column-names]
-  (let [index-name (str "idx_" table-name)]
-    (str "CREATE UNIQUE INDEX " index-name " ON " table-name " (" (string/join ", " key-column-names) ")")))
-
-(defn create-table [db table-name column-names key-column-names]
+(defn- create-table [db table-name column-names key-column-names]
   (jdbc/execute! db
                  (jdbc/create-table-ddl
                   table-name
@@ -38,7 +33,7 @@
     (jdbc/execute! db
                    (create-index-ddl table-name key-column-names))))
 
-(defn query [db table-name id ctxs]
+(defn- query [db table-name id ctxs]
   (let [id-part (string/join ", " (map db-name id))
         values-1 (str "(" (string/join ", " (repeat (count id) "?")) ")")
         values (string/join ", " (repeat (count ctxs) values-1))
@@ -62,12 +57,12 @@
                       (<< " ON CONFLICT (~(comma-join key-column-names)) DO UPDATE SET ~{set-clause}"))))]
             values))))
 
-(defn upsert-multi! [db table-name column-names key-column-names rows]
+(defn- upsert-multi! [db table-name column-names key-column-names rows]
   (jdbc/db-do-prepared db false
                        (upsert-multi-row-sql table-name column-names key-column-names rows)
                        {:multi? true}))
 
-(defn upsert-multi-ensure-table! [db table-name column-names key-column-names rows]
+(defn- upsert-multi-ensure-table! [db table-name column-names key-column-names rows]
   (try
     (upsert-multi! db table-name column-names key-column-names rows)
     (catch org.sqlite.SQLiteException e
@@ -77,10 +72,7 @@
           (upsert-multi! db table-name column-names key-column-names rows))
         (throw e)))))
 
-(defn all-nils? [id context]
-  (every? nil? (map context id)))
-
-(defn ensure-types-single [columns context]
+(defn- ensure-types-single [columns context]
   (doseq [[k v] context
           :when (contains? columns k)
           :let [check (if (= k :parent) int? #(or (nil? %) (string? %)))]
@@ -93,22 +85,10 @@
   (merge (zipmap columns (repeat nil))
          context))
 
-(defn ensure-types [columns ctxs]
+(defn- ensure-types [columns ctxs]
   (mapv (partial ensure-types-single columns) ctxs))
 
-(defn separate-by
-  "Returns [matching non-matching], where matching is a vector of
-  (f x) for x in coll, and non-matching is a vector of x's such that
-  (f x) returns nil."
-  [f coll]
-  (reduce (fn [[matching non-matching] x]
-            (if-let [res (f x)]
-              [(conj matching res) non-matching]
-              [matching (conj non-matching x)]))
-          [[] []]
-          coll))
-
-(defn extract-ids [db table-name key-columns ctxs]
+(defn- extract-ids [db table-name key-columns ctxs]
   (let [inserted-rows (query db table-name key-columns ctxs)
         inserted-row-ids (into {}
                                (map (fn [r] [(select-keys r key-columns) (:id r)]))
@@ -117,7 +97,7 @@
            (assoc ctx :parent (get inserted-row-ids (select-keys ctx key-columns))))
          ctxs)))
 
-(defn extract-ids-from-last-rowid [db ctxs]
+(defn- extract-ids-from-last-rowid [db ctxs]
   (let [rowid (-> (jdbc/query db "select last_insert_rowid() rowid") first :rowid)]
     (map #(assoc %1 :parent %2) ctxs (range (inc (- rowid (count ctxs))) (inc rowid)))))
 
