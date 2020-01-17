@@ -163,11 +163,11 @@
 
 (defn maybe-store-in-db
   "Wraps upsert-context, skipping contexts that contain ::skip."
-  [db {:keys [name db-columns id] :as processor} contexts]
-  (if (and db db-columns)
-    (let [db-columns (distinct (conj db-columns :parent))
+  [db {:keys [name ::columns ::key-columns] :as processor} contexts]
+  (if (and db columns)
+    (let [columns (distinct (conj columns :parent))
           [skipped inserted] (separate ::skip contexts)
-          new-items (upsert-contexts db name id db-columns inserted)]
+          new-items (upsert-contexts db name key-columns columns inserted)]
       (into (vec skipped) new-items))
     contexts))
 

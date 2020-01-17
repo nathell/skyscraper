@@ -90,7 +90,7 @@
     than Enlive; if you are scraping something other than HTMLs (e.g., PDFs via a custom
     parser); or when you’re scraping malformed HTML and need an interim fixup steps before
     parsing.
-  - `:db-columns` – a vector of keys that are supposed to exist."
+  - `:skyscraper.db/columns` – a vector of keys that are supposed to exist."
   [name & {:as args}]
   (swap! processors assoc name (merge {:name name, :process-fn default-process-fn} args)))
 

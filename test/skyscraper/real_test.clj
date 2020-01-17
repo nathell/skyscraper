@@ -139,8 +139,8 @@
     {:status 404}))
 
 (defprocessor :db-self-pointing-test-items
-  :db-columns [:item]
-  :id [:item]
+  :skyscraper.db/columns [:item]
+  :skyscraper.db/key-columns [:item]
   :process-fn (fn [res ctx]
                 (concat
                  (for [a (select res [:a])]

@@ -144,15 +144,15 @@
 (defprocessor :users
   :process-fn (fn [res ctx]
                 [{:name "John", :surname "Doe", :url "/", :processor :accounts}])
-  :db-columns [:name :surname]
-  :id [:name :surname])
+  :skyscraper.db/columns [:name :surname]
+  :skyscraper.db/key-columns [:name :surname])
 
 (defprocessor :accounts
   :process-fn (fn [res ctx]
                 [{:bank-account "0123-4567"}
                  {:bank-account "8888-9999"}])
-  :db-columns [:bank-account]
-  :id [:bank-account])
+  :skyscraper.db/columns [:bank-account]
+  :skyscraper.db/key-columns [:bank-account])
 
 (deftest test-sqlite
   (with-temporary-sqlite-db conn
