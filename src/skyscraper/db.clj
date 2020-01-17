@@ -34,11 +34,9 @@
                          ["parent" :integer]]
                         (for [col column-names :when (not= col "parent")]
                           [col :text]))))
-  (when key-column-names
+  (when (seq key-column-names)
     (jdbc/execute! db
                    (create-index-ddl table-name key-column-names))))
-
-(def rowid (keyword "last_insert_rowid()"))
 
 (defn query [db table-name id ctxs]
   (let [id-part (string/join ", " (map db-name id))
@@ -53,13 +51,15 @@
   [table-name column-names key-column-names values]
   (let [nc (count column-names)
         vcs (map count values)
-        non-key-column-names (vec (set/difference (set column-names) (set key-column-names)))]
+        non-key-column-names (vec (set/difference (set column-names) (set key-column-names)))
+        comma-join (partial string/join ", ")
+        qmarks (repeat (first vcs) "?")]
     (if (not (and (or (zero? nc) (= nc (first vcs))) (apply = vcs)))
       (throw (IllegalArgumentException. "insert! called with inconsistent number of columns / values"))
-      (into [(str "INSERT INTO " table-name " (" (string/join ", " column-names)
-                  ") VALUES (" (string/join ", " (repeat (first vcs) "?"))
-                  ") ON CONFLICT (" (string/join ", " key-column-names)
-                  ") DO UPDATE SET " (string/join ", " (map #(str % " = excluded." %) non-key-column-names)))]
+      (into [(str (<< "INSERT INTO ~{table-name} (~(comma-join column-names)) VALUES (~(comma-join qmarks))")
+                  (when (seq key-column-names)
+                    (let [set-clause (string/join ", " (map #(str % " = excluded." %) non-key-column-names))]
+                      (<< " ON CONFLICT (~(comma-join key-column-names)) DO UPDATE SET ~{set-clause}"))))]
             values))))
 
 (defn upsert-multi! [db table-name column-names key-column-names rows]
@@ -108,6 +108,19 @@
           [[] []]
           coll))
 
+(defn extract-ids [db table-name key-columns ctxs]
+  (let [inserted-rows (query db table-name key-columns ctxs)
+        inserted-row-ids (into {}
+                               (map (fn [r] [(select-keys r key-columns) (:id r)]))
+                               inserted-rows)]
+    (map (fn [ctx]
+           (assoc ctx :parent (get inserted-row-ids (select-keys ctx key-columns))))
+         ctxs)))
+
+(defn extract-ids-from-last-rowid [db ctxs]
+  (let [rowid (-> (jdbc/query db "select last_insert_rowid() rowid") first :rowid)]
+    (map #(assoc %1 :parent %2) ctxs (range (inc (- rowid (count ctxs))) (inc rowid)))))
+
 (defn insert-all!
   "Inserts new contexts into a given db table, returning them augmented
   with the `:id` fields corresponding to the DB-generated primary
@@ -120,15 +133,11 @@
         table-name (db-name table)
         column-names (mapv db-name columns)
         key-column-names (mapv db-name key-columns)
-        rows (map (apply juxt columns) ctxs)
-        _ (upsert-multi-ensure-table! db table-name column-names key-column-names rows)
-        inserted-rows (query db table-name key-columns ctxs)
-        inserted-row-ids (into {}
-                               (map (fn [r] [(select-keys r key-columns) (:id r)]))
-                               inserted-rows)]
-    (map (fn [ctx]
-           (assoc ctx :parent (get inserted-row-ids (select-keys ctx key-columns))))
-         ctxs)))
+        rows (map (apply juxt columns) ctxs)]
+    (upsert-multi-ensure-table! db table-name column-names key-column-names rows)
+    (if (seq key-column-names)
+      (extract-ids db table-name key-columns ctxs)
+      (extract-ids-from-last-rowid db ctxs))))
 
 (defn maybe-store-in-db [db {:keys [name db-columns id] :as q} contexts]
   (if (and db db-columns)
