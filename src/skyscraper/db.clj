@@ -37,7 +37,8 @@
   (let [id-part (string/join ", " (map db-name id))
         values-1 (str "(" (string/join ", " (repeat (count id) "?")) ")")
         values (string/join ", " (repeat (count ctxs) values-1))
-        query (<< "select * from ~{table-name} where (~{id-part}) in (values~{values})")
+        null-clause (string/join " or " (map #(str (db-name %) " is null") id)) ;; XXX: this might return too broad a result set
+        query (<< "select * from ~{table-name} where (~{id-part}) in (values~{values}) or ~{null-clause}")
         params (mapcat (apply juxt id) ctxs)]
     (map normalize-keys
          (jdbc/query db (into [query] params)))))
