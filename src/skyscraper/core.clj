@@ -32,15 +32,17 @@
 
 ;;; Micro-templating framework
 
-(defn format-template
+(defn- format-template
   "Fills in a template string with moving parts from m. template should be
-   a string containing 'variable names' starting with colons; these names
-   are extracted, converted to keywords and looked up in m, which should be
-   a map (or a function taking keywords and returning strings).
+  a string containing 'variable names' starting with colons; these names
+  are extracted, converted to keywords and looked up in m, which should be
+  a map (or a function taking keywords and returning strings).
 
-   Example:
-   (format-template \":group/:user/index\" {:user \"joe\", :group \"admins\"})
-   ;=> \"admins/joe/index\" "
+  Example:
+  ```clojure
+  (format-template \":group/:user/index\" {:user \"joe\", :group \"admins\"})
+  ;=> \"admins/joe/index\"
+  ```"
   [template m]
   (let [re #":[a-z-]+"
         keys (map #(keyword (subs % 1)) (re-seq re template))
@@ -49,7 +51,7 @@
 
 ;;; Cache
 
-(defn sanitize-cache
+(defn- sanitize-cache
   "Converts a cache argument to the processor to a CacheBackend if it
    isn't one already."
   [value cache-dir]
@@ -60,9 +62,15 @@
 
 ;;; Defining processors
 
-(defonce processors (atom {}))
+(defonce
+  ^{:private true
+    :doc "The global registry of processors: an atom containing a map from
+          keywords naming processors to the processor definitions."}
+  processors (atom {}))
 
-(defn default-process-fn
+(defn- default-process-fn
+  "The default function that becomes a processor's :process-fn
+  if you don't specify one."
   [resource context]
   [{::unimplemented true, ::resource resource, ::context context}])
 
@@ -94,10 +102,14 @@
   [name & {:as args}]
   (swap! processors assoc name (merge {:name name, :process-fn default-process-fn} args)))
 
-(defn ensure-distinct-seq [x]
+(defn- ensure-distinct-seq
+  "If x is a sequence, removes duplicates from it, else returns a vector
+  containing x only."
+  [x]
   (if (map? x) [x] (doall (distinct x))))
 
 (defn run-processor
+  "Runs a processor named by processor-name on document."
   ([processor-name document] (run-processor processor-name document {}))
   ([processor-name document context]
    (let [processor (or (@processors processor-name)
@@ -113,9 +125,11 @@
         (= (f m1) (f m2)))
       true)))
 
-(defn filter-contexts
-  [options contexts]
-  (if-let [only (:only options)]
+(defn- filter-contexts
+  "If `:only` was supplied in `options`, returns `contexts` filtered by it
+  as specified in the docstring of `scrape`, else returns all contexts."
+  [{:keys [only] :as options} contexts]
+  (if only
     (let [filter-fn (if (fn? only)
                       only
                       (fn [x] (some #(allows? % x) (ensure-distinct-seq only))))]
@@ -124,14 +138,18 @@
 
 (defn merge-urls
   "Fills the missing parts of new-url (which can be either absolute,
-   root-relative, or relative) with corresponding parts from url
-   (an absolute URL) to produce a new absolute URL."
+  root-relative, or relative) with corresponding parts from url
+  (an absolute URL) to produce a new absolute URL."
   [url new-url]
   (if (string/starts-with? new-url "?")
     (str (string/replace url #"\?.*" "") new-url)
     (str (URL. (URL. url) new-url))))
 
-(defn merge-contexts [old new]
+(defn- merge-contexts
+  "Given two contexts, `old` as passed to a processor as input, and
+  `new` as returned by the processor, returns a merged context that
+  will be fed to child processors."
+  [old new]
   (let [preserve (context/dissoc-internal old)
         new-url (if-let [u (:url new)]
                   (merge-urls (:url old) u))
@@ -140,12 +158,14 @@
               new)]
     (merge preserve new)))
 
-(defn string-resource
+(defn- string-resource
   "Returns an Enlive resource for a HTML snippet passed as a string."
   [s]
   (enlive/html-resource (java.io.StringReader. s)))
 
-(defn interpret-body
+(defn- interpret-body
+  "Interprets `body`, a byte-array, as a string encoded with
+  content-type provided in `headers`."
   [headers ^bytes body]
   (let [stream1 (java.io.ByteArrayInputStream. body)
         body-map (http/parse-html stream1)
@@ -155,28 +175,30 @@
     (String. body (Charset/forName (http/detect-charset content-type)))))
 
 (defn enlive-parse
+  "Parses a byte array as a Enlive resource."
   [headers body]
   (string-resource (interpret-body headers body)))
 
 (defn reaver-parse
+  "Parses a byte array as a JSoup/Reaver document."
   [headers body]
   (reaver/parse (interpret-body headers body)))
 
 ;;; Scraping
 
-(defn extract-namespaced-keys
+(defn- extract-namespaced-keys
   [ns m]
   (into {}
         (comp (filter #(= (namespace (key %)) ns))
               (map (fn [[k v]] [(keyword (name k)) v])))
         m))
 
-(defn make-pipeline [{:keys [download-mode] :as options}]
+(defn- make-pipeline [{:keys [download-mode] :as options}]
   (case download-mode
     :async `[init-handler check-cache-handler download-handler store-cache-handler process-handler split-handler]
     :sync  `[init-handler sync-download-handler store-cache-handler process-handler sync-split-handler]))
 
-(defn compose-sync-handlers
+(defn- compose-sync-handlers
   ([h] h)
   ([h1 h2]
    (fn [context options]
@@ -184,12 +206,12 @@
   ([h1 h2 & hs]
    (compose-sync-handlers h1 (apply compose-sync-handlers h2 hs))))
 
-(defn make-squashed-handler
+(defn- make-squashed-handler
   [pipeline]
   (apply compose-sync-handlers
          (map (partial ns-resolve *ns*) (reverse pipeline))))
 
-(defn advance-pipeline [pipeline context]
+(defn- advance-pipeline [pipeline context]
   (let [next-stage (or (::next-stage context)
                        (->> pipeline
                             (drop-while #(not= % (::stage context)))
@@ -210,7 +232,7 @@
                                             :sync)))
       (context/dissoc-leaf-keys context))))
 
-(defn init-handler [context options]
+(defn- init-handler [context options]
   (let [{:keys [cache-template cache-key-fn]} (merge options (@processors (:processor context)))
         cache-key-fn (or cache-key-fn
                          #(when cache-template
@@ -219,19 +241,19 @@
             ::current-processor (@processors (:processor context))
             ::cache-key (cache-key-fn context))]))
 
-(defn maybe-retrieve-from-http-cache [context options]
+(defn- maybe-retrieve-from-http-cache [context options]
   (if-let [key (::cache-key context)]
     (if-let [item (cache/load-blob (:html-cache options) key)]
       {:body (:blob item), :headers (:meta item)})))
 
-(defn check-cache-handler [context options]
+(defn- check-cache-handler [context options]
   (if-let [cached-response (maybe-retrieve-from-http-cache context options)]
     [(assoc context
             ::response cached-response
             ::next-stage `process-handler)]
     [context]))
 
-(defn download-handler [context {:keys [pipeline connection-manager download-semaphore retries] :as options} callback]
+(defn- download-handler [context {:keys [pipeline connection-manager download-semaphore retries] :as options} callback]
   (debugf "Running download-handler: %s" (:processor context))
   (let [req (merge {:method :get, :url (:url context)}
                    (extract-namespaced-keys "http" context))
@@ -266,7 +288,7 @@
                     success-fn
                     error-fn)))))
 
-(defn sync-download-handler [context {:keys [pipeline connection-manager] :as options}]
+(defn- sync-download-handler [context {:keys [pipeline connection-manager] :as options}]
   (let [req (merge {:method :get, :url (:url context), :connection-manager connection-manager}
                    (extract-namespaced-keys "http" context)
                    (:http-options options))
@@ -292,11 +314,11 @@
                (warnf "[download] Unexpected error %s, giving up, context %s" error (context/describe context))
                {::error error, ::context context}))])))))
 
-(defn store-cache-handler [context options]
+(defn- store-cache-handler [context options]
   (cache/save-blob (:html-cache options) (::cache-key context) (get-in context [::response :body]) (get-in context [::response :headers]))
   [context])
 
-(defn process-handler [context options]
+(defn- process-handler [context options]
   (if-let [cached-result (cache/load-blob (:processed-cache options) (::cache-key context))]
     [(assoc context ::new-items (map (partial merge-contexts context) (edn/read-string (String. (:blob cached-result)))))]
     (let [parse (:parse-fn options)
@@ -307,19 +329,19 @@
       (cache/save-blob (:processed-cache options) (::cache-key context) (.getBytes (pr-str result)) nil)
       [(assoc context ::new-items (map (partial merge-contexts context) result))])))
 
-(defn split-handler [context options]
+(defn- split-handler [context options]
   (->> (::new-items context)
        (map #(assoc % ::stage `split-handler))
        (filter-contexts options)))
 
-(defn sync-split-handler [context options]
+(defn- sync-split-handler [context options]
   (->> (::new-items context)
        (filter-contexts options)
        (map #(if (and (:processor %) (:url %))
                %
                (context/dissoc-leaf-keys %)))))
 
-(defn sync-handler [context options]
+(defn- sync-handler [context options]
   (debugf "Running sync-handler: %s %s" (::stage context) (:processor context))
   (let [f (ns-resolve *ns* (::stage context))
         results (f context options)]
@@ -365,12 +387,28 @@
                                  :async (http-conn/make-reuseable-async-conn-manager (:conn-mgr-options options)))
            :download-semaphore (java.util.concurrent.Semaphore. (:max-connections options)))))
 
-(defn scrape [seed & {:as options}]
+(defn scrape
+  "Runs scraping on seed (an initial context or sequence of contexts), returning
+  a lazy sequence of leaf contexts.
+
+  `options` may include:
+
+  - `:only` – prunes the scrape tree to only include matching contexts; this can be
+    a map (specifying to only include records whose values, if present, coincide with
+    the map) or a predicate
+
+  as well as the ones supported by [[skyscraper.traverse/launch]]."
+  [seed & {:as options}]
   (let [options (initialize-options options)
         seed (initialize-seed options seed)]
     (traverse/leaf-seq seed options)))
 
-(defn scrape! [seed & {:as options}]
+(defn scrape!
+  "Like scrape, but eager: terminates after scraping has succeeded. Returns nil.
+  Pass `:db`, `:db-file`, `:leaf-chan`, or `:item-chan` to access scraped data.
+
+  `options` are the same as in `scrape!`."
+  [seed & {:as options}]
   (let [options (initialize-options options)
         seed (initialize-seed options seed)]
     (traverse/traverse! seed options)))
