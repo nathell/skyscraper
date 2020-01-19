@@ -9,10 +9,10 @@
 ;;; Netstrings
 
 (let [bytes-type (type (byte-array []))]
-  (defn byte-array? [item]
+  (defn- byte-array? [item]
     (= (type item) bytes-type)))
 
-(defn write-netstring
+(defn- write-netstring
   [^OutputStream stream item]
   (let [^bytes b (cond (byte-array? item) item
                        (string? item)     (.getBytes item)
@@ -22,7 +22,7 @@
     (.write stream b)
     (.write stream (int \,))))
 
-(defn read-netstring
+(defn- read-netstring
   [^InputStream stream]
   (loop [len 0]
     (let [ch (.read stream)]
