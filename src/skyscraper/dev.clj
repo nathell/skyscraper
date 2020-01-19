@@ -1,4 +1,6 @@
 (ns skyscraper.dev
+  "Tools for interactive development of scrapers. See [doc/development-mode.md]
+  for an overview and example."
   (:require
     [clojure.core.async :refer [chan alts!!]]
     [clojure.java.browse :refer [browse-url]]
@@ -7,7 +9,10 @@
     [skyscraper.traverse :as traverse]
     [taoensso.timbre :as log]))
 
-(defn browse-context [ctx]
+(defn- browse-context
+  "Dumps the given context's response to a temporary file
+  and opens a browser on it."
+  [ctx]
   (let [f (java.io.File/createTempFile "skyscraper-" ".html")]
     (with-open [is (io/input-stream (get-in ctx [::core/response :body]))
                 os (io/output-stream f)]
@@ -16,7 +21,9 @@
 
 (def ^:private scrape-data (atom nil))
 
-(defn cleanup []
+(defn cleanup
+  "Runs a previously terminated [[scrape]] to completion."
+  []
   (when-let [{{:keys [item-chan terminate-chan]} :channels} @scrape-data]
     (log/infof "Resuming suspended scrape to clean up")
     (loop []
@@ -26,7 +33,11 @@
           (reset! scrape-data nil)
           (recur))))))
 
-(defn scrape [seed & {:as options}]
+(defn scrape
+  "A variant of [[skyscraper.core/scrape!]] that will stop and open a
+  browser on the first encountered processor that isn't defined or doesn't
+  have a process-fn."
+  [seed & {:as options}]
   (cleanup)
   (let [item-chan (chan)
         options (core/initialize-options (assoc options :item-chan item-chan :parallelism 1))
@@ -44,10 +55,15 @@
                 nil)
             (recur)))))))
 
-(defn document []
+(defn document
+  "Returns the parsed document that the last invocation of [[scrape]]
+  has stopped on."
+  []
   (:resource @scrape-data))
 
-(defn run-last-processor []
+(defn run-last-processor
+  "Calls the processor whose invocation caused [[scrape]] to stop."
+  []
   (if-let [{:keys [resource context]} @scrape-data]
     (core/run-processor (:processor context) resource context)
     (throw (ex-info "No interactive scraping in progress" {}))))
