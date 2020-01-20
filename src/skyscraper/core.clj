@@ -56,9 +56,10 @@
    isn't one already."
   [value cache-dir]
   (cond
-   (= value true) (cache/fs cache-dir)
-   (not value) (cache/null)
-   :otherwise value))
+    (string? value) (cache/fs value)
+    (= value true) (cache/fs cache-dir)
+    (not value) (cache/null)
+    :otherwise value))
 
 ;;; Defining processors
 
@@ -98,7 +99,12 @@
     than Enlive; if you are scraping something other than HTMLs (e.g., PDFs via a custom
     parser); or when you’re scraping malformed HTML and need an interim fixup steps before
     parsing.
-  - `:skyscraper.db/columns` – a vector of keys that are supposed to exist."
+  - `:skyscraper.db/columns` – a vector of keys that are supposed to exist in the resulting
+    contexts; the corresponding values will be emitted as a database row when `:db` or
+    `:db-file` is supplied as a scrape argument.
+  - `:skyscraper.db/key-columns` – a vector of keys that, when
+    supplied, will be used to upsert records to database and treated as
+    a unique key to match existing database records against."
   [name & {:as args}]
   (swap! processors assoc name (merge {:name name, :process-fn default-process-fn} args)))
 
@@ -439,13 +445,39 @@
   "Runs scraping on seed (an initial context or sequence of contexts), returning
   a lazy sequence of leaf contexts.
 
-  `options` may include:
+  `options` may include the ones supported by [[skyscraper.traverse/launch]],
+  as well as:
 
+  - `:conn-mgr-options` – Skyscraper will create a clj-http connection manager
+    with these options (a sync or async one, depending on `:download-mode`)
+    and use it across all HTTP requests it makes.
+    See [[clj-http.conn-mgr/make-reusable-conn-manager]] and
+    [[clj-http.conn-mgr/make-reusable-async-conn-manager]] for details on the
+    options you can specify here.
+  - `:download-mode` – can be `:async` (default) or `:sync`. When async,
+    Skyscraper will use clj-http's asynchronous mode to make HTTP requests.
+  - `:html-cache` – the HTTP cache to use. Can be an instance of `CacheBackend`,
+    a string (meaning a directory to use for a filesystem cache), `nil` or `false`
+    (meaning no cache), or `true` (meaning a filesystem cache in the default
+    location, [[html-cache-dir]]). Defaults to `nil`.
+  - `:http-options` – a map of additional options that will be passed to
+    [[clj-http.core/request]].
+  - `:max-connections` – maximum number of HTTP requests that can be active
+    at any time.
   - `:only` – prunes the scrape tree to only include matching contexts; this can be
     a map (specifying to only include records whose values, if present, coincide with
-    the map) or a predicate
-
-  as well as the ones supported by [[skyscraper.traverse/launch]]."
+    the map) or a predicate (meaning to filter contexts on it).
+  - `:parse-fn` – a function that takes a map of HTTP headers and a byte array
+    containing the downloaded document, and returns a parsed representation of
+    that document. Skyscraper provides [[enlive-parse]] and [[reaver-parse]]
+    out of the box. Defaults to [[enlive-parse]].
+  - `:processed-cache` – the processed cache to use. Same possible values as
+    for `:http-cache`. Defaults to `nil`.
+  - `:request-fn` – the HTTP request function to use. Defaults to [[clj-http.core/request]].
+    Skyscraper relies on the API of clj-http, so only override this if you
+    know what you're doing.
+  - `:retries` – maximum number of times that Skyscraper will retry downloading
+    a page until it gives up. Defaults to 5."
   [seed & {:as options}]
   (let [options (initialize-options options)
         seed (initialize-seed options seed)]
