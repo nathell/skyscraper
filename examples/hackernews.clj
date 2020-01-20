@@ -4,7 +4,7 @@
   (:require
     [net.cgrand.enlive-html :refer [select attr? text emit* has pred first-child last-child nth-child]]
     [skyscraper.core :refer :all]
-    [skyscraper.helpers :refer [href]]))
+    [skyscraper.enlive-helpers :refer [href]]))
 
 (defn seed [& _]
   [{:url "https://news.ycombinator.com/",

@@ -7,7 +7,7 @@
             [net.cgrand.enlive-html :refer [select text]]
             [skyscraper.cache :as cache]
             [skyscraper.core :refer :all]
-            [skyscraper.helpers :refer [href]]
+            [skyscraper.enlive-helpers :refer [href]]
             [skyscraper.test-utils :refer [with-temporary-sqlite-db]]
             [taoensso.timbre :as timbre]))
 

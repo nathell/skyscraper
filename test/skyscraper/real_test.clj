@@ -8,7 +8,7 @@
     [ring.middleware.cookies :refer [wrap-cookies]]
     [ring.util.response :as response]
     [skyscraper.core :refer :all]
-    [skyscraper.helpers :refer [href]]
+    [skyscraper.enlive-helpers :refer [href]]
     [skyscraper.test-utils :refer [with-temporary-sqlite-db]]
     [taoensso.timbre :as timbre]))
 
