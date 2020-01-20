@@ -39,7 +39,8 @@
   "Provides facilities for caching downloaded blobs (typically HTML),
    potentially enriched with some metadata (typically headers), in
    some kind of storage. Implementations of this protocol can be passed
-   as :html-cache and :processed-cache options to `skyscraper.core/scrape`."
+   as `:html-cache` and `:processed-cache` options to
+   [[skyscraper.core/scrape]]."
   (save-blob [cache key blob metadata])
   (load-blob [cache key]))
 
