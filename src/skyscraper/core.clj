@@ -3,6 +3,7 @@
     [clj-http.client :as http]
     [clj-http.conn-mgr :as http-conn]
     [clj-http.core :as http-core]
+    [clj-http.headers :as http-headers]
     [clojure.edn :as edn]
     [clojure.set :refer [intersection]]
     [clojure.string :as string]
@@ -312,15 +313,14 @@
     (debugf "[download] Waiting")
     (.acquire download-semaphore)
     (infof "[download] Downloading %s" (:url context))
-    (http/with-additional-middleware [http/wrap-lower-case-headers]
-      (let [req (merge {:async? true,
-                        :connection-manager connection-manager}
-                       req (:http-options options))
-            request-fn (or (:request-fn options)
-                           http/request)]
-        (request-fn req
-                    success-fn
-                    error-fn)))))
+    (let [req (merge {:async? true,
+                      :connection-manager connection-manager}
+                     req (:http-options options))
+          request-fn (or (:request-fn options)
+                         http/request)]
+      (request-fn req
+                  success-fn
+                  error-fn))))
 
 (defn- sync-download-handler
   "Synchronous version of download-handler that also checks for cache."
@@ -365,7 +365,7 @@
     [(assoc context ::new-items (map (partial merge-contexts context) (edn/read-string (String. (:blob cached-result)))))]
     (let [parse (:parse-fn options)
           {:keys [headers body]} (::response context)
-          document (parse headers body)
+          document (parse (into (http-headers/header-map) headers) body)
           processor-name (:processor context)
           result (run-processor processor-name document context)]
       (cache/save-blob (:processed-cache options) (::cache-key context) (.getBytes (pr-str result)) nil)
