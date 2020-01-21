@@ -312,12 +312,12 @@
     (debugf "[download] Waiting")
     (.acquire download-semaphore)
     (infof "[download] Downloading %s" (:url context))
-    (let [req (merge {:async? true,
-                      :connection-manager connection-manager}
-                     req (:http-options options))
-          request-fn (or (:request-fn options)
-                         http/request)]
-      (http/with-additional-middleware [http/wrap-lower-case-headers]
+    (http/with-additional-middleware [http/wrap-lower-case-headers]
+      (let [req (merge {:async? true,
+                        :connection-manager connection-manager}
+                       req (:http-options options))
+            request-fn (or (:request-fn options)
+                           http/request)]
         (request-fn req
                     success-fn
                     error-fn)))))
