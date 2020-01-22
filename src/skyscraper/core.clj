@@ -181,24 +181,29 @@
 
 (defn parse-string
   "Parses `body`, a byte-array, as a string encoded with
-  content-type provided in `headers`."
-  [headers ^bytes body]
-  (let [stream1 (java.io.ByteArrayInputStream. body)
-        body-map (http/parse-html stream1)
-        additional-headers (http/get-headers-from-body body-map)
-        all-headers (merge headers additional-headers)
-        content-type (get all-headers "content-type")]
-    (String. body (Charset/forName (http/detect-charset content-type)))))
+  content-type provided in `headers`. If `try-html?` is true,
+  tries to look for encoding in the <meta http-equiv> tag
+  in `body`."
+  ([headers ^bytes body] (parse-string headers body false))
+  ([headers ^bytes body try-html?]
+   (let [stream1 (java.io.ByteArrayInputStream. body)
+         body-map (http/parse-html stream1)
+         additional-headers (if try-html?
+                              (http/get-headers-from-body body-map)
+                              {})
+         all-headers (merge headers additional-headers)
+         content-type (get all-headers "content-type")]
+     (String. body (Charset/forName (http/detect-charset content-type))))))
 
 (defn parse-enlive
   "Parses a byte array as a Enlive resource."
   [headers body]
-  (string-resource (parse-string headers body)))
+  (string-resource (parse-string headers body true)))
 
 (defn parse-reaver
   "Parses a byte array as a JSoup/Reaver document."
   [headers body]
-  (reaver/parse (parse-string headers body)))
+  (reaver/parse (parse-string headers body true)))
 
 ;;; Scraping
 
