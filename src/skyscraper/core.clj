@@ -109,6 +109,15 @@
   [name & {:as args}]
   (swap! processors assoc name (merge {:name name, :process-fn default-process-fn} args)))
 
+(defn- get-option
+  "Some options can be specified either in the processor definition or
+  during scraping; in this case, the per-processor one takes precedence."
+  ([context options k] (get-option context options k nil))
+  ([context options k default]
+   (or (get-in context [::current-processor k])
+       (get options k)
+       default)))
+
 (defn- ensure-distinct-seq
   "If x is a sequence, removes duplicates from it, else returns a vector
   containing x only."
@@ -170,7 +179,7 @@
   [s]
   (enlive/html-resource (java.io.StringReader. s)))
 
-(defn- interpret-body
+(defn interpret-body
   "Interprets `body`, a byte-array, as a string encoded with
   content-type provided in `headers`."
   [headers ^bytes body]
@@ -315,7 +324,7 @@
     (infof "[download] Downloading %s" (:url context))
     (let [req (merge {:async? true,
                       :connection-manager connection-manager}
-                     req (:http-options options))
+                     req (get-option context options :http-options))
           request-fn (or (:request-fn options)
                          http/request)]
       (request-fn req
@@ -327,7 +336,7 @@
   [context {:keys [pipeline connection-manager] :as options}]
   (let [req (merge {:method :get, :url (:url context), :connection-manager connection-manager}
                    (extract-namespaced-keys "http" context)
-                   (:http-options options))
+                   (get-option context options :http-options))
         request-fn (or (:request-fn options)
                        http/request)]
     (try
@@ -361,7 +370,7 @@
   [context options]
   (if-let [cached-result (cache/load-blob (:processed-cache options) (::cache-key context))]
     [(assoc context ::new-items (map (partial merge-contexts context) (edn/read-string (String. (:blob cached-result)))))]
-    (let [parse (:parse-fn options)
+    (let [parse (get-option context options :parse-fn)
           {:keys [headers body]} (::response context)
           document (parse (into (http-headers/header-map) headers) body)
           processor-name (:processor context)
