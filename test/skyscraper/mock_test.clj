@@ -1,4 +1,4 @@
-(ns skyscraper-test
+(ns skyscraper.mock-test
   (:require [clj-http.client :as http]
             [clojure.java.io :as io]
             [clojure.java.jdbc :as jdbc]
