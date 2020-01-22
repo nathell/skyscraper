@@ -42,7 +42,7 @@ We start at the first page of a paginated list, containing links to pages descri
 At this point, we can run our first scrape, even though we haven’t defined the `:tree-list` processor yet:
 
  ```clojure
-(scrape seed :parse-fn core/reaver-parse)
+(scrape seed :parse-fn core/parse-reaver)
 ```
 
 Skyscraper will run for a while and eventually say:
@@ -116,7 +116,7 @@ It should return 11 maps: 10 species plus the next page of the list. All good so
 Re-run the scrape as before:
 
 ```clojure
-(scrape seed :parse-fn core/reaver-parse)
+(scrape seed :parse-fn core/parse-reaver)
 ```
 
 Skyscraper will clean up after the previous attempt and suspend scraping on the species detail page this time. For the sake of example, we will do the simplest thing and just grab the HTML description:

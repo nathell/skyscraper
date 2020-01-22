@@ -30,4 +30,4 @@
 (defn run []
   (core/scrape seed
                :html-cache true
-               :parse-fn core/reaver-parse))
+               :parse-fn core/parse-reaver))

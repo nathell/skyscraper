@@ -179,8 +179,8 @@
   [s]
   (enlive/html-resource (java.io.StringReader. s)))
 
-(defn interpret-body
-  "Interprets `body`, a byte-array, as a string encoded with
+(defn parse-string
+  "Parses `body`, a byte-array, as a string encoded with
   content-type provided in `headers`."
   [headers ^bytes body]
   (let [stream1 (java.io.ByteArrayInputStream. body)
@@ -190,15 +190,15 @@
         content-type (get all-headers "content-type")]
     (String. body (Charset/forName (http/detect-charset content-type)))))
 
-(defn enlive-parse
+(defn parse-enlive
   "Parses a byte array as a Enlive resource."
   [headers body]
-  (string-resource (interpret-body headers body)))
+  (string-resource (parse-string headers body)))
 
-(defn reaver-parse
+(defn parse-reaver
   "Parses a byte array as a JSoup/Reaver document."
   [headers body]
-  (reaver/parse (interpret-body headers body)))
+  (reaver/parse (parse-string headers body)))
 
 ;;; Scraping
 
@@ -418,7 +418,7 @@
   {:max-connections 10,
    :retries 5,
    :conn-mgr-options {},
-   :parse-fn enlive-parse,
+   :parse-fn parse-enlive,
    :download-mode :async,
    :http-options {:redirect-strategy :lax,
                   :as :byte-array,
@@ -476,8 +476,8 @@
     the map) or a predicate (meaning to filter contexts on it).
   - `:parse-fn` – a function that takes a map of HTTP headers and a byte array
     containing the downloaded document, and returns a parsed representation of
-    that document. Skyscraper provides [[enlive-parse]] and [[reaver-parse]]
-    out of the box. Defaults to [[enlive-parse]].
+    that document. Skyscraper provides [[parse-string]], [[parse-enlive]], and
+    [[parse-reaver]] out of the box. Defaults to [[parse-enlive]].
   - `:processed-cache` – the processed cache to use. Same possible values as
     for `:http-cache`. Defaults to `nil`.
   - `:request-fn` – the HTTP request function to use. Defaults to [[clj-http.core/request]].

@@ -212,7 +212,7 @@
                   {:url (href link), :processor :overridable-parse-fn-numbers})))
 
 (defprocessor :overridable-parse-fn-numbers
-  :parse-fn interpret-body
+  :parse-fn parse-string
   :process-fn (fn [res ctx]
                 (for [x (string/split res #",")]
                   {:number (Integer/parseInt x)})))
