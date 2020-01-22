@@ -333,9 +333,7 @@
     (try
       (infof "[download] Downloading %s" (:url context))
       (let [cached (maybe-retrieve-from-http-cache context options)
-            resp (or cached
-                     (http/with-additional-middleware [http/wrap-lower-case-headers]
-                       (request-fn req)))]
+            resp (or cached (request-fn req))]
         (debugf "[download] %s %s" (if cached "Retrieved from cache:" "Downloaded:") (:url context))
         [(cond-> context
            true (assoc ::response resp)
