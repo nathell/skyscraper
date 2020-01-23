@@ -302,7 +302,7 @@
 
 (defn- download-handler
   "Asynchronously downloads the page specified by context."
-  [context {:keys [pipeline connection-manager download-semaphore retries] :as options} callback]
+  [context {:keys [pipeline connection-manager download-semaphore retries sleep] :as options} callback]
   (debugf "Running download-handler: %s" (:processor context))
   (let [req (merge {:method :get, :url (:url context)}
                    (extract-namespaced-keys "http" context))
@@ -332,6 +332,8 @@
                      req (get-option context options :http-options))
           request-fn (or (:request-fn options)
                          http/request)]
+      (when sleep
+        (Thread/sleep sleep))
       (request-fn req
                   success-fn
                   error-fn))))
@@ -489,7 +491,9 @@
     Skyscraper relies on the API of clj-http, so only override this if you
     know what you're doing.
   - `:retries` – maximum number of times that Skyscraper will retry downloading
-    a page until it gives up. Defaults to 5."
+    a page until it gives up. Defaults to 5.
+  - `:sleep` – sleep this many millisecond before each request. Useful for
+    throttling. It's probably best to set `:parallelism` to 1 together with this."
   [seed & {:as options}]
   (let [options (initialize-options options)
         seed (initialize-seed options seed)]
