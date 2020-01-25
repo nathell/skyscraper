@@ -468,6 +468,11 @@
     See [[clj-http.conn-mgr/make-reusable-conn-manager]] and
     [[clj-http.conn-mgr/make-reusable-async-conn-manager]] for details on the
     options you can specify here.
+  - `:db` – a clojure.java.jdbc compatible db-spec that, when passed, will
+    cause scraping to generate a SQL database of results. See
+    `doc/db.md` for a walkthrough. Only supports SQLite.
+  - `:db-file` – an alternative to `:db`, a filename or path that will
+    be used to construct a SQLite db-spec.
   - `:download-mode` – can be `:async` (default) or `:sync`. When async,
     Skyscraper will use clj-http's asynchronous mode to make HTTP requests.
   - `:html-cache` – the HTTP cache to use. Can be an instance of `CacheBackend`,
