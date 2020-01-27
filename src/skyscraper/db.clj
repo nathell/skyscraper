@@ -151,15 +151,16 @@
   those columns and updating db accordingly."
   [db table key-columns columns ctxs]
   (debugf "Upserting %s rows" (count ctxs))
-  (let [ctxs (ensure-types (set columns) ctxs)
-        table-name (keyword->db-name table)
-        column-names (mapv keyword->db-name columns)
-        key-column-names (mapv keyword->db-name key-columns)
-        rows (map (apply juxt columns) ctxs)]
-    (upsert-multi-ensure-table! db table-name column-names key-column-names rows)
-    (if (seq key-column-names)
-      (extract-ids db table-name key-columns key-column-names ctxs)
-      (extract-ids-from-last-rowid db ctxs))))
+  (when (seq ctxs)
+    (let [ctxs (ensure-types (set columns) ctxs)
+          table-name (keyword->db-name table)
+          column-names (mapv keyword->db-name columns)
+          key-column-names (mapv keyword->db-name key-columns)
+          rows (map (apply juxt columns) ctxs)]
+      (upsert-multi-ensure-table! db table-name column-names key-column-names rows)
+      (if (seq key-column-names)
+        (extract-ids db table-name key-columns key-column-names ctxs)
+        (extract-ids-from-last-rowid db ctxs)))))
 
 (defn maybe-store-in-db
   "Wraps upsert-context, skipping contexts that contain ::skip."

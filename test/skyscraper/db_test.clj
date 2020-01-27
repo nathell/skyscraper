@@ -31,4 +31,7 @@
         (doseq [data [example-data update]]
           (db/upsert-contexts db :example-data [:name :surname] [:name :surname :phone] data))
         (is (= (jdbc/query db "SELECT name, surname, phone FROM example_data ORDER BY id")
-               [(first update) (second example-data)]))))))
+               [(first update) (second example-data)]))))
+    (testing "upsert empty contexts is a no-op"
+      (with-temporary-sqlite-db db
+        (is (empty? (db/upsert-contexts db :example-data [:name :surname] [:name :surname :phone] [])))))))
