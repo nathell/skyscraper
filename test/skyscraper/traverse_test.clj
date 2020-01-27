@@ -68,6 +68,9 @@
             (is (= (sort numbers) (range 100 1000)))))))))
 
 (deftest test-errors
+  (is (thrown? clojure.lang.ExceptionInfo
+               (traverse/traverse! [{:number 0, ::traverse/handler xform-erroring, ::traverse/call-protocol :sync}] {})))
+  #_
   (let [items (traverse/leaf-seq [{:number 0, ::traverse/handler xform-erroring, ::traverse/call-protocol :sync}] {})
         numbers (remove nil? (map :number items))]
     (is (= (count (filter ::traverse/error items)) 1))

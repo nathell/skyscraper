@@ -72,8 +72,12 @@
 (defn- done [{:keys [todo doing] :as s}
              {:keys [done new-items] :as t}
              want]
-  (if-not (contains? doing done)
-    {:unexpected done, :state s}
+  (cond
+    (not (contains? doing done)) {:unexpected done, :state s}
+
+    (::error (first new-items)) {:want want, :error (first new-items)}
+
+    :otherwise
     (let [all-todo (add-to-todo todo new-items)
           [giveaway new-todo] (pop-n want all-todo)
           doing (-> doing (disj done) (into giveaway))]
@@ -121,7 +125,7 @@
                                  (>! data-chan res)
                                  (recur state want nil))
                                (recur state (inc want) nil)))
-        :otherwise (let [{:keys [unexpected want giveaway terminate state]}
+        :otherwise (let [{:keys [unexpected want giveaway terminate state error]}
                          (done state message want)]
                      (cond
                        unexpected (do
@@ -132,6 +136,18 @@
                                    (dotimes [i want]
                                      (>! data-chan {::terminate true}))
                                    (recur state want (- parallelism want)))
+                       error (do
+                               (debugf "[governor] Error encountered, entering abnormal termination")
+                               (loop [cnt (- parallelism want)]
+                                 (when (pos? cnt)
+                                   (let [msg (<! control-chan)]
+                                     (recur (if (= msg :gimme)
+                                              (dec cnt)
+                                              cnt)))))
+                               (dotimes [i parallelism]
+                                 (>! data-chan {::terminate true}))
+                               (>! terminate-chan error)
+                               (close! terminate-chan))
                        :else (do
                                (debugf "[governor] Giving away: %d" (count giveaway))
                                (doseq [item giveaway]
@@ -148,7 +164,11 @@
       (>!! item-chan new-contexts))
     (when (and leaf-chan (seq leaves))
       (>!! leaf-chan leaves))
-    (>!! control-chan (processed context non-leaves))))
+    (when-let [err (::error (first new-contexts))]
+      (errorf err "[worker %d] Handler threw an error" i))
+    (>!! control-chan (processed context (if (::error (first new-contexts))
+                                           new-contexts
+                                           non-leaves)))))
 
 (defmacro capture-errors [context & body]
   `(let [context# ~context]
@@ -227,7 +247,10 @@
 (defn wait!
   "Waits until the scraping process is complete."
   [{:keys [terminate-chan]}]
-  (<!! terminate-chan))
+  (when-let [error (<!! terminate-chan)]
+    (throw (ex-info "Handler threw an error"
+                    (::context error)
+                    (::error error)))))
 
 (defn close-all!
   "Closes channels used by the traversal process. Call this function
