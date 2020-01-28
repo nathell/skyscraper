@@ -368,7 +368,8 @@
   "Assuming context has downloaded data, stores it in HTML cache if
   applicable and returns it unmodified."
   [context options]
-  (cache/save-blob (:html-cache options) (::cache-key context) (get-in context [::response :body]) (get-in context [::response :headers]))
+  (when-let [key (::cache-key context)]
+    (cache/save-blob (:html-cache options) key (get-in context [::response :body]) (get-in context [::response :headers])))
   [context])
 
 (defn- process-handler
