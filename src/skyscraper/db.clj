@@ -68,8 +68,11 @@
       (throw (IllegalArgumentException. "insert! called with inconsistent number of columns / values"))
       (into [(str (<< "INSERT INTO ~{table-name} (~(comma-join column-names)) VALUES (~(comma-join qmarks))")
                   (when (seq key-column-names)
-                    (let [set-clause (string/join ", " (map #(str % " = excluded." %) non-key-column-names))]
-                      (<< " ON CONFLICT (~(comma-join key-column-names)) DO UPDATE SET ~{set-clause}"))))]
+                    (let [set-clause (string/join ", " (map #(str % " = excluded." %) non-key-column-names))
+                          do-clause (if (empty? non-key-column-names)
+                                      "NOTHING"
+                                      (str "UPDATE SET " set-clause))]
+                      (<< " ON CONFLICT (~(comma-join key-column-names)) DO ~{do-clause}"))))]
             values))))
 
 (defn- upsert-multi!

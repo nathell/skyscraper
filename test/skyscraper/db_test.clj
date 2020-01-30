@@ -34,4 +34,10 @@
                [(first update) (second example-data)]))))
     (testing "upsert empty contexts is a no-op"
       (with-temporary-sqlite-db db
-        (is (empty? (db/upsert-contexts db :example-data [:name :surname] [:name :surname :phone] [])))))))
+        (is (empty? (db/upsert-contexts db :example-data [:name :surname] [:name :surname :phone] [])))))
+    (testing "columns same as key-columns"
+      (with-temporary-sqlite-db db
+        (dotimes [_ 5]
+          (db/upsert-contexts db :example-data [:name :surname] [:name :surname] example-data))
+        (is (= (jdbc/query db "SELECT count(*) cnt FROM example_data")
+               [{:cnt 2}]))))))
