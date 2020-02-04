@@ -300,6 +300,17 @@
             ::next-stage `process-handler)]
     [context]))
 
+(defn- wait
+  "If ms-or-fn is a number, Thread/sleep that many milliseconds, otherwise
+  assume that it's a zero-argument function, call it and sleep for the resulting
+  number."
+  [ms-or-fn]
+  (when ms-or-fn
+    (let [ms (if (number? ms-or-fn)
+               ms-or-fn
+               (ms-or-fn))]
+      (Thread/sleep ms))))
+
 (defn- download-handler
   "Asynchronously downloads the page specified by context."
   [context {:keys [pipeline connection-manager download-semaphore retries sleep] :as options} callback]
@@ -332,8 +343,7 @@
                      req (get-option context options :http-options))
           request-fn (or (:request-fn options)
                          http/request)]
-      (when sleep
-        (Thread/sleep sleep))
+      (wait sleep)
       (request-fn req
                   success-fn
                   error-fn))))
