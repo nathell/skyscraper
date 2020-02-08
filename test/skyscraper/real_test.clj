@@ -141,38 +141,3 @@
                [{:item nil} {:item "Item 1"} {:item "Item 2"} {:item "Item 3"}]))
         (is (= (jdbc/query conn "SELECT item FROM db_self_pointing_test_items WHERE parent IS NOT NULL ORDER BY item")
                [{:item "Item 4"} {:item "Item 5"}]))))))
-
-;; character-encoding-test
-
-(def polish-text "Filmuj rzeź żądań, pość, gnęb chłystków")
-(def polish-html-latin2 (.getBytes (str "<html><body><p>" polish-text "</p></body></html>") "ISO-8859-2"))
-
-(defn character-encoding-test-handler [{:keys [uri]}]
-  {:status 200,
-   :headers {"Content-Type" "text/html; charset=ISO-8859-2"},
-   :body polish-html-latin2})
-
-(defprocessor :character-encoding
-  :cache-template "character-encoding/index"
-  :process-fn (fn [res ctx]
-                {:text (text (first (select res [:p])))}))
-
-;; Like MemoryCache, but doesn't preserve the type of metadata it
-;; stores (neither does FSCache).
-
-(deftype CoerciveMemoryCache
-    [storage]
-  cache/CacheBackend
-  (save-blob [cache key blob metadata]
-    (swap! storage assoc key {:blob blob, :meta (into {} metadata)}))
-  (load-blob [cache key]
-    (@storage key)))
-
-(deftest character-encoding-test
-  (let [cache (CoerciveMemoryCache. (atom {}))]
-    (with-server character-encoding-test-handler
-      (scrape! (make-seed :character-encoding)
-               :html-cache cache)
-      (is (= (scrape (make-seed :character-encoding)
-                     :html-cache cache)
-             [{:text polish-text}])))))
