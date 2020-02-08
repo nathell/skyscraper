@@ -1,6 +1,35 @@
 (ns skyscraper.test-utils
   (:require
-    [clojure.java.jdbc :as jdbc]))
+    [clojure.java.jdbc :as jdbc]
+    [hiccup.page :refer [html5]]
+    [ring.adapter.jetty :refer [run-jetty]]
+    [ring.util.response :as response]))
+
+;; ring
+
+(def port 64738) ;; let's hope it's not used
+
+(defn make-seed
+  ([processor] (make-seed processor "/"))
+  ([processor initial-url] [{:processor processor
+                             :url (str "http://localhost:" port initial-url)}]))
+
+(def srv (atom nil))
+
+(defn start-server [handler]
+  (reset! srv (run-jetty handler {:port port, :join? false})))
+
+(defmacro with-server [handler & body]
+  `(let [server# (run-jetty ~handler {:port port, :join? false})]
+     (try
+       ~@body
+       (finally
+         (.stop server#)))))
+
+(defmacro resp-page [& body]
+  `(response/response (html5 ~@body)))
+
+;; sqlite
 
 (defn temporary-sqlite-db-file []
   (java.io.File/createTempFile "test" ".sqlite"))

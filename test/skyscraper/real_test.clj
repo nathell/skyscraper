@@ -11,30 +11,8 @@
     [skyscraper.cache :as cache]
     [skyscraper.core :refer :all]
     [skyscraper.enlive-helpers :refer [href]]
-    [skyscraper.test-utils :refer [with-temporary-sqlite-db]]
+    [skyscraper.test-utils :refer [make-seed resp-page with-server with-temporary-sqlite-db]]
     [taoensso.timbre :as timbre]))
-
-(def port 64738) ;; let's hope it's not used
-
-(defn make-seed
-  ([processor] (make-seed processor "/"))
-  ([processor initial-url] [{:processor processor
-                             :url (str "http://localhost:" port initial-url)}]))
-
-(def srv (atom nil))
-
-(defn start-server [handler]
-  (reset! srv (run-jetty handler {:port port, :join? false})))
-
-(defmacro with-server [handler & body]
-  `(let [server# (run-jetty ~handler {:port port, :join? false})]
-     (try
-       ~@body
-       (finally
-         (.stop server#)))))
-
-(defmacro resp-page [& body]
-  `(response/response (html5 ~@body)))
 
 ;; basic-cookie-test
 
@@ -221,55 +199,3 @@
   (with-server overridable-parse-fn-test-handler
     (is (= (scrape (make-seed :overridable-parse-fn-start))
            [{:number 8} {:number 80} {:number 418}]))))
-
-;; updates-test
-
-(def updates-test-visited-pages (atom #{}))
-
-(defn updates-test-make-handler [max-pages]
-  (fn handler [{:keys [uri]}]
-    (if (= uri "/")
-      (resp-page [:ul (for [x (range 1 (inc max-pages))]
-                        [:li [:a {:href (str "/" x)} "Number " x]])])
-      (let [number (Long/parseLong (subs uri 1))]
-        (swap! updates-test-visited-pages conj number)
-        (resp-page [:h1 number])))))
-
-(defprocessor :updates-test-start
-  :cache-template "index"
-  :updatable true
-  :process-fn (fn [res ctx]
-                (for [[i link] (map-indexed vector (select res [:a]))]
-                  {:index i, :url (href link), :processor :updates-test-num-page})))
-
-(defprocessor :updates-test-num-page
-  :cache-template "number/:index"
-  :process-fn (fn [res ctx]
-                {:number (Long/parseLong (text (first (select res [:h1]))))}))
-
-(deftest updates-test
-  (let [cache (cache/memory)]
-    (reset! updates-test-visited-pages #{})
-    (with-server (updates-test-make-handler 10)
-      (let [results (doall (scrape (make-seed :updates-test-start)
-                                   :html-cache cache
-                                   :parallelism 1))]
-        (is (= (set (map :number results)) (set (range 1 11))))
-        (is (= (set @updates-test-visited-pages) (set (range 1 11))))))
-    (reset! updates-test-visited-pages #{})
-    (with-server (updates-test-make-handler 20)
-      (let [results (doall (scrape (make-seed :updates-test-start)
-                                   :html-cache cache
-                                   :update true
-                                   :parallelism 1))]
-        (is (= (set (map :number results)) (set (range 1 21))))
-        (is (= (set @updates-test-visited-pages) (set (range 11 21))))))
-    (reset! updates-test-visited-pages #{})
-    (with-server (updates-test-make-handler 30)
-      (let [results (doall (scrape (make-seed :updates-test-start)
-                                   :html-cache cache
-                                   :update true
-                                   :uncached-only true
-                                   :parallelism 1))]
-        (is (= (set (map :number results)) (set (range 21 31))))
-        (is (= (set @updates-test-visited-pages) (set (range 21 31))))))))
