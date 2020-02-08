@@ -77,29 +77,3 @@
   (with-server http-method-reset-test-handler
     (is (= (scrape (make-seed :http-method-reset-test-root))
            [{:output "Success"}]))))
-
-;; nondistinct-test
-
-(defn nondistinct-test-handler [{:keys [uri]}]
-  (condp = uri
-    "/" (resp-page (repeat 100 [:p [:a {:href "/second"} "Next"]]))
-    "/second" (resp-page [:p "Item"])
-    {:status 404}))
-
-(defprocessor :nondistinct-test-root
-  :process-fn (fn [res ctx]
-                (for [a (select res [:a])]
-                  {:url (href a),
-                   :processor :nondistinct-test-second})))
-
-(defprocessor :nondistinct-test-second
-  :process-fn (fn [res ctx]
-                (for [p (select res [:p])]
-                  {:item (text p)})))
-
-(deftest nondistinct-test
-  (timbre/set-level! :warn)
-  (let [seed (make-seed :nondistinct-test-root)]
-    (with-server nondistinct-test-handler
-      (is (= (scrape seed)
-             [{:item "Item"}])))))
