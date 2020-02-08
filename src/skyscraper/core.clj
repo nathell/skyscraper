@@ -282,22 +282,36 @@
             ::current-processor (@processors (:processor context))
             ::cache-key (cache-key-fn context))]))
 
+(defn- updatable?
+  "Should we redownload the given context even if we have it cached?"
+  [context]
+  (let [updatable (get-in context [::current-processor :updatable])]
+    (if (fn? updatable)
+      (updatable context)
+      updatable)))
+
 (defn- maybe-retrieve-from-http-cache
   "When a context's cache-key exists in the cache, fetches the associated
   data."
   [context options]
-  (if-let [key (::cache-key context)]
-    (if-let [item (cache/load-blob (:html-cache options) key)]
-      {:body (:blob item), :headers (:meta item)})))
+  (when (or (not (:update options))
+            (not (updatable? context)))
+    (if-let [key (::cache-key context)]
+      (if-let [item (cache/load-blob (:html-cache options) key)]
+        {:body (:blob item), :headers (:meta item)}))))
 
 (defn- check-cache-handler
   "If context is cached, loads the cached data and skips [[download-handler]],
   otherwise returns it as-is."
   [context options]
   (if-let [cached-response (maybe-retrieve-from-http-cache context options)]
-    [(assoc context
-            ::response cached-response
-            ::next-stage `process-handler)]
+    (if-not (:uncached-only options)
+      [(assoc context
+              ::response cached-response
+              ::next-stage `process-handler)]
+      (do
+        (infof "Skipping cached: %s" (::cache-key context))
+        []))
     [context]))
 
 (defn- wait
