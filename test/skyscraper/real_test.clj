@@ -176,26 +176,3 @@
       (is (= (scrape (make-seed :character-encoding)
                      :html-cache cache)
              [{:text polish-text}])))))
-
-;; overridable-parse-fn-test
-
-(defn overridable-parse-fn-test-handler [{:keys [uri]}]
-  (condp = uri
-    "/" (resp-page [:a {:href "/numbers"} "Some numbers"])
-    "/numbers" (response/response "8,80,418")))
-
-(defprocessor :overridable-parse-fn-start
-  :process-fn (fn [res ctx]
-                (for [link (select res [:a])]
-                  {:url (href link), :processor :overridable-parse-fn-numbers})))
-
-(defprocessor :overridable-parse-fn-numbers
-  :parse-fn parse-string
-  :process-fn (fn [res ctx]
-                (for [x (string/split res #",")]
-                  {:number (Integer/parseInt x)})))
-
-(deftest overridable-parse-fn-test
-  (with-server overridable-parse-fn-test-handler
-    (is (= (scrape (make-seed :overridable-parse-fn-start))
-           [{:number 8} {:number 80} {:number 418}]))))
