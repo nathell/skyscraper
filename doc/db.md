@@ -111,7 +111,7 @@ Often, you have a paginated structure where a page contains a number of records 
  {:page 2, :url "/page/2", :processor :page}]
 ```
 
-If you DB-enable such a processor (presumably with the `:name` column), Skyscraper will dutifully emit a null-name row for the last context. There are several ways to cope with this:
+If you DB-enable such a processor (presumably with the `:name` column), Skyscraper will duly emit a null-name row for the last context. There are several ways to cope with this:
 
 - You could change your scraping structure, having a top-level processor that just scans the pagination producing links to pages, and the `page` processor returning just the records of interest.
 - Alternatively, you could just bite the bullet and accept this situation, remembering to insert `NOT NULL` in your queries where appropriate. In general, it is a good idea to treat the Skyscraper-generated database as an interim step of your scraping flow, and have a cleaning step further downstream (the data structure you’re trying to recreate will sometimes not correspond faithfully to the scraping structure).
