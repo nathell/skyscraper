@@ -540,8 +540,12 @@
     know what you're doing.
   - `:retries` – maximum number of times that Skyscraper will retry downloading
     a page until it gives up. Defaults to 5.
-  - `:sleep` – sleep this many millisecond before each request. Useful for
-    throttling. It's probably best to set `:parallelism` to 1 together with this."
+  - `:sleep` – sleep this many milliseconds before each request, or a niladic fn
+    that returns a number of milliseconds. Useful for throttling. It's probably
+    best to set `:parallelism` to 1 together with this.
+  - `:uncached-only` – prune the scrape tree, yielding only the nodes that haven't been
+    scraped yet. See `doc/updates.md`.
+  - `:update` – run in update mode (see `doc/updates.md`)."
   [seed & {:as options}]
   (let [options (initialize-options options)
         seed (initialize-seed options seed)]
