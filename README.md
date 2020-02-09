@@ -1,34 +1,26 @@
 # NOTE NOTE NOTE
 
-This is an experimental branch of Skyscraper that is a major rewrite, using core.async, and will eventually become 0.3.0. This code should be currently considered unstable. Everything can break at any moment. The documentation below is obsolete and needs updating.
+This repo is a pre-release state. Things mostly work, but documentation is in the process of being updated.
 
 # Skyscraper
 
-## Structural scraping
+A framework that helps you build structured dumps of whole websites.
 
-What is structural scraping? Think of [Enlive]. It allows you to parse arbitrary HTML and extract various bits of information out of it: subtrees or parts of subtrees determined by selectors. You can then convert this information to some other format, easier for machine consumption, or process it in whatever other way you wish. This is called _scraping_.
+[![clojars](https://img.shields.io/clojars/v/skyscraper.svg)](https://clojars.org/skyscraper)
+[![CircleCI](https://circleci.com/gh/nathell/skyscraper.svg?style=shield)](https://circleci.com/gh/nathell/skyscraper)
+[![cljdoc](https://cljdoc.org/badge/nathell/skyscraper)](https://cljdoc.org/d/skyscraper/skyscraper/CURRENT)
+
+## Concepts
+
+### Structural scraping and scrape trees
+
+Think of [Enlive]. It allows you to parse arbitrary HTML and extract various bits of information out of it: subtrees or parts of subtrees determined by selectors. You can then convert this information to some other format, easier for machine consumption, or process it in whatever other way you wish. This is called _scraping_.
 
 Now imagine that you have to parse a lot of HTML documents. They all come from the same site, so most of them are structured in the same way and can be scraped using the same sets of selectors. But not all of them. There’s an index page, which has a different layout and needs to be treated in its own peculiar way, with pagination and all. There are pages that group together individual pages in categories. And so on. Treating single pages is easy, but with whole collections of pages, you quickly find yourself writing a lot of boilerplate code.
 
-In particular, you realize that you can’t just `wget -r` the whole thing and then parse each page in turn. Rather, you want to simulate the workflow of a user who tries to “click through” the website to obtain the information she’s interested in. Sites have tree-like structure, and you want to keep track of this structure as you traverse the site, and reflect it in your output. I call it “structural scraping”.
+In particular, you realize that you can’t just `wget -r` the whole thing and then parse each page in turn. Rather, you want to simulate the workflow of a user who tries to “click through” the website to obtain the information she’s interested in. Sites have tree-like structure, and you want to keep track of this structure as you traverse the site, and reflect it in your output. I call it “structural scraping”, and the tree of traversed pages and information extracted from each one – the “scrape tree”.
 
-## A look at Skyscraper
-
-This is where Skyscraper comes in. Skyscraper grew out of quite a few one-off attempts to create machine-readable, clean “dumps” of different websites. Skyscraper builds on [Enlive] to process single pages, but adds abstractions to facilitate easy processing of entire sites.
-
-Skyscraper can cache pages that it has already downloaded, as well as data extracted from those pages. Thus, if scraping fails for whatever reason (broken connection, OOM error, etc.), Skyscraper doesn’t have to re-download every page it has already processed, and can pick up off wherever it had been interrupted. This also facilitates updating scraped information without having to re-download the entire site.
-
-Skyscraper is work in progress. This means that anything can change at any time. All suggestions, comments, pull requests, wishlists, etc. are welcome.
-
- [Enlive]: http://cgrand.github.com/enlive
-
-The current release is 0.2.3. To use Skyscraper in your project, add the following to the `dependencies` section in your `project.clj`:
-
-```
-[skyscraper "0.2.3"]
-```
-
-## Contexts
+### Contexts
 
 A “context” is a map from keywords to arbitrary data. Think of it as “everything we have scraped so far”. A context has two special keys, `:url` and `:processor`, that contains the next URL to visit and the processor to handle it with (see below).
 
@@ -42,7 +34,7 @@ A typical function producing an initial list of contexts (a _seed_) looks like t
     :processor :root-page}])
 ```
 
-## Processors
+### Processors
 
 A “processor” is a unit of scraping: a function that processes sets of HTML pages in a uniform way.
 
@@ -76,29 +68,13 @@ This default error handling strategy can be overridden, either globally by suppl
 
 The argument to `:error-handler` should be a function that takes an URL and a clj-http error map (containing the `:status` key), and either throws an exception or returns a seq of contexts to be used as the processor’s output. See the function `default-error-handler` in Skyscraper’s source code for an example.
 
-## Caching
+## Where to go from here
 
-Skyscraper has two kinds of caches: one holding the raw downloaded HTML before parsing and processing (“HTML cache”), and one holding the results of parsing and processing individual pages (“processed cache”). Both caches are enabled by default, but can be disabled as needed.
+Explore the [documentation]. Have a look at examples in the `examples/` directory of the repo. Read the docstrings, especially those of `scrape` and `defprocessor`.
 
-In normal usage (i.e., scraping a site using code that is known to work), it is recommended to keep the processed cache enabled. The HTML cache can be disabled in this case without many drawbacks, as Skyscraper will not attempt to redownload a page that had been processed already. The advantage of disabling HTML cache is saving disk space: Web pages are typically markup-heavy and the interesting pieces constitute a tiny part of them, so the HTML cache can grow much faster than the processed cache. This can be problematic when scraping huge sites.
+If something is unclear, or you have suggestions or encounter a bug, please create an issue!
 
-The converse is true when developing Skyscraper-based code and writing your own processors. The HTML cache comes in handy as you try out different ways of obtaining the desired information from the page at hand, as it only has to be downloaded once. On the other hand, disabling the processed cache guarantees that the information will be recomputed when the scraping code changes.
-
-Skyscraper supports pluggable cache backends. The core library contains a protocol that the backends should conform to (`CacheBackend`), as well as two implementations of that protocol: one that doesn’t actually cache data, just pretending to be doing so (a “null cache”), and one that stores data in the filesystem. See the file `skyscraper/cache.clj` for details.
-
-By default, both the HTML cache and the processed cache use the FS backend and are configured to live in `~/skyscraper-data`, respectively under `cache/html` and `cache/processed`.
-
-## Templating
-
-Every page cached by Skyscraper is stored under a cache key (a string). It is up to the user to construct a key in a unique way for each page, based on information available in the context. Typically, the key is hierarchical, containing a logical “path” to the page separated by slashes (it may or may not correspond to the page’s URL).
-
-To facilitate construction of such keys, Skyscraper provides a micro-templating framework. The key templates can be specified in a `cache-template` parameter of the `defprocessor` macro (see above). When a template contains parts prefixed by a colon and containing lower-case characters and dashes, these are replaced by corresponding context elements. As an example, the template `"mysite/:surname/:name"`, given the context `{:name "John", :surname "Doe"}`, will generate the key `"mysite/Doe/John"`.
-
-## Invocation and output
-
-## Examples
-
-More elaborate examples can be found in the `examples/` directory of the repo.
+ [documentation]: https://cljdoc.org/d/skyscraper/skyscraper/
 
 ## Caveats
 
