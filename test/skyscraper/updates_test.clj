@@ -36,25 +36,23 @@
 
 (deftest updates-test
   (timbre/set-level! :info)
-  (let [cache (cache/memory)]
-    (clean-visited-pages!)
-    (with-server (make-handler 10)
-      (let [results (doall (scrape (make-seed ::start)
-                                   :html-cache cache))]
-        (is (= (set (map :number results)) (set (range 1 11))))
-        (is (= (set @visited-pages) (set (range 1 11))))))
-    (clean-visited-pages!)
-    (with-server (make-handler 20)
-      (let [results (doall (scrape (make-seed ::start)
-                                   :html-cache cache
-                                   :update true))]
-        (is (= (set (map :number results)) (set (range 1 21))))
-        (is (= (set @visited-pages) (set (range 11 21))))))
-    (clean-visited-pages!)
-    (with-server (make-handler 30)
-      (let [results (doall (scrape (make-seed ::start)
-                                   :html-cache cache
-                                   :update true
-                                   :uncached-only true))]
-        (is (= (set (map :number results)) (set (range 21 31))))
-        (is (= (set @visited-pages) (set (range 21 31))))))))
+  (doseq [cache-option [:html-cache :processed-cache]]
+    (let [cache (cache/memory)
+          uscrape #(doall (apply scrape (make-seed ::start)
+                                 (into [cache-option cache] %&)))]
+      (clean-visited-pages!)
+      (with-server (make-handler 10)
+        (let [results (uscrape)]
+          (is (= (set (map :number results)) (set (range 1 11))))
+          (is (= (set @visited-pages) (set (range 1 11))))))
+      (clean-visited-pages!)
+      (with-server (make-handler 20)
+        (let [results (uscrape :update true)]
+          (is (= (set (map :number results)) (set (range 1 21))))
+          (is (= (set @visited-pages) (set (range 11 21))))))
+      (clean-visited-pages!)
+      (with-server (make-handler 30)
+        (let [results (uscrape :update true
+                               :uncached-only true)]
+          (is (= (set (map :number results)) (set (range 21 31))))
+          (is (= (set @visited-pages) (set (range 21 31)))))))))

@@ -290,6 +290,7 @@
       (updatable context)
       updatable)))
 
+;; TODO: deduplicate code around here
 (defn- maybe-retrieve-from-http-cache
   "When a context's cache-key exists in the cache, fetches the associated
   data."
@@ -300,19 +301,38 @@
       (if-let [item (cache/load-blob (:html-cache options) key)]
         {:body (:blob item), :headers (:meta item)}))))
 
+(defn- maybe-retrieve-from-processed-cache
+  "Likewise, for processed cache."
+  [context options]
+  (when (or (not (:update options))
+            (not (updatable? context)))
+    (if-let [key (::cache-key context)]
+      (if-let [item (cache/load-blob (:processed-cache options) key)]
+        (edn/read-string (String. (:blob item)))))))
+
 (defn- check-cache-handler
   "If context is cached, loads the cached data and skips [[download-handler]],
   otherwise returns it as-is."
   [context options]
-  (if-let [cached-response (maybe-retrieve-from-http-cache context options)]
-    (if-not (:uncached-only options)
-      [(assoc context
-              ::response cached-response
-              ::next-stage `process-handler)]
-      (do
-        (infof "Skipping cached: %s" (::cache-key context))
-        []))
-    [context]))
+  (let [processed-result (maybe-retrieve-from-processed-cache context options)
+        cached-response (maybe-retrieve-from-http-cache context options)]
+    (infof "processed-result: %s cached-response: %s url: %s"
+           (not (not processed-result))
+           (not (not cached-response))
+           (:url context))
+    (cond
+      (and (:uncached-only options) (or processed-result cached-response))
+      #_=> []
+      processed-result
+      #_=> [(assoc context
+                   ::new-items (map (partial merge-contexts context) processed-result)
+                   ::next-stage `split-handler)]
+      cached-response
+      #_=> [(assoc context
+                   ::response cached-response
+                   ::next-stage `process-handler)]
+      :otherwise
+      #_=> [context])))
 
 (defn- wait
   "If ms-or-fn is a number, Thread/sleep that many milliseconds, otherwise
@@ -400,15 +420,13 @@
   "Runs the processor specified by context on itself. Returns a single context
   with the processor results as `::new-items`."
   [context options]
-  (if-let [cached-result (cache/load-blob (:processed-cache options) (::cache-key context))]
-    [(assoc context ::new-items (map (partial merge-contexts context) (edn/read-string (String. (:blob cached-result)))))]
-    (let [parse (get-option context options :parse-fn)
-          {:keys [headers body]} (::response context)
-          document (parse (into (http-headers/header-map) headers) body)
-          processor-name (:processor context)
-          result (run-processor processor-name document context)]
-      (cache/save-blob (:processed-cache options) (::cache-key context) (.getBytes (pr-str result)) nil)
-      [(assoc context ::new-items (map (partial merge-contexts context) result))])))
+  (let [parse (get-option context options :parse-fn)
+        {:keys [headers body]} (::response context)
+        document (parse (into (http-headers/header-map) headers) body)
+        processor-name (:processor context)
+        result (run-processor processor-name document context)]
+    (cache/save-blob (:processed-cache options) (::cache-key context) (.getBytes (pr-str result)) nil)
+    [(assoc context ::new-items (map (partial merge-contexts context) result))]))
 
 (defn- split-handler
   "Extracts `::new-items` out of the supplied contexts and prunes the scraping
