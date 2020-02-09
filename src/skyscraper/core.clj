@@ -316,10 +316,6 @@
   [context options]
   (let [processed-result (maybe-retrieve-from-processed-cache context options)
         cached-response (maybe-retrieve-from-http-cache context options)]
-    (infof "processed-result: %s cached-response: %s url: %s"
-           (not (not processed-result))
-           (not (not cached-response))
-           (:url context))
     (cond
       (and (:uncached-only options) (or processed-result cached-response))
       #_=> []
