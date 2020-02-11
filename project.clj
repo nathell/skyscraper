@@ -5,12 +5,12 @@
   :codox {:metadata {:doc/format :markdown}}
   :url "https://github.com/nathell/skyscraper"
   :dependencies [[org.clojure/clojure "1.9.0"]
-                 [org.clojure/core.async "0.4.474"]
+                 [org.clojure/core.async "0.7.559"]
                  [org.clojure/core.incubator "0.1.4"]
                  [org.clojure/data.csv "0.1.4"]
                  [org.clojure/data.priority-map "0.0.10"]
-                 [org.clojure/java.jdbc "0.7.6"]
-                 [clj-http "3.9.1"]
+                 [org.clojure/java.jdbc "0.7.11"]
+                 [clj-http "3.10.0"]
                  [crouton "0.1.2"]
                  [enlive "1.1.6" :exclusions [jsoup]]
                  [http-kit "2.3.0"]
