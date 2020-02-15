@@ -341,6 +341,29 @@
                (ms-or-fn))]
       (Thread/sleep ms))))
 
+(defn signal-error
+  "Call this function from `download-error-handler` to cause scraping to signal an error."
+  [error context]
+  [{:skyscraper.traverse/error error,
+    :skyscraper.traverse/context context}])
+
+(defn default-download-error-handler
+  "By default, when clj-http returns an error (e.g., when the server returns 4xx or 5xx),
+  Skyscraper will call this function to determine what to do next.
+  This handler causes Skyscraper to retry up to `retries` times for 5xx status codes,
+  and to throw an exception otherwise."
+  [error options context]
+  (let [{:keys [status]} (.getData error)
+        retry? (and status (>= status 500))
+        retry (inc (or (::retry context) 0))]
+    (if (and retry? (< retry (:retries options)))
+      (do
+        (warnf "[download] Unexpected error %s, retry %s, context %s" error retry (context/describe context))
+        [(assoc context ::retry retry)])
+      (do
+        (warnf "[download] Unexpected error %s, giving up, context %s" error (context/describe context))
+        (signal-error context)))))
+
 (defn- download-handler
   "Asynchronously downloads the page specified by context."
   [context {:keys [pipeline connection-manager download-semaphore retries sleep] :as options} callback]
@@ -356,15 +379,8 @@
                          (:cookies resp) (update :http/cookies merge (:cookies resp)))]))
         error-fn (fn [error]
                    (.release download-semaphore)
-                   (let [retry (inc (or (::retry context) 0))]
-                     (callback
-                      [(if (< retry (:retries options))
-                          (do
-                            (warnf "[download] Unexpected error %s, retry %s, context %s" error retry (context/describe context))
-                            (assoc context ::retry retry))
-                          (do
-                            (warnf "[download] Unexpected error %s, giving up, context %s" error (context/describe context))
-                            {::error error, ::context context}))])))]
+                   (let [error-handler (:download-error-handler options)]
+                     (callback (error-handler error options context))))]
     (debugf "[download] Waiting")
     (.acquire download-semaphore)
     (infof "[download] Downloading %s" (:url context))
@@ -395,14 +411,8 @@
            true (assoc ::response resp)
            (:cookies resp) (update :http/cookies merge (:cookies resp)))])
       (catch Exception error
-        (let [retry (inc (or (::retry context) 0))]
-          [(if (< retry (:retries options))
-             (do
-               (warnf "[download] Unexpected error %s, retry %s, context %s" error retry (context/describe context))
-               (assoc context ::retry retry))
-             (do
-               (warnf "[download] Unexpected error %s, giving up, context %s" error (context/describe context))
-               {::error error, ::context context}))])))))
+        (let [error-handler (:download-error-handler options)]
+          (error-handler error options context))))))
 
 (defn- store-cache-handler
   "Assuming context has downloaded data, stores it in HTML cache if
@@ -466,6 +476,7 @@
    :conn-mgr-options {},
    :parse-fn parse-enlive,
    :download-mode :async,
+   :download-error-handler default-download-error-handler,
    :http-options {:redirect-strategy :lax,
                   :as :byte-array,
                   :socket-timeout 30000,
@@ -512,6 +523,8 @@
     `doc/db.md` for a walkthrough. Only supports SQLite.
   - `:db-file` – an alternative to `:db`, a filename or path that will
     be used to construct a SQLite db-spec.
+  - `:download-error-handler` – a function called when clj-http returns an
+    error when downloading; see `doc/error-handling.md` for details.
   - `:download-mode` – can be `:async` (default) or `:sync`. When async,
     Skyscraper will use clj-http's asynchronous mode to make HTTP requests.
   - `:html-cache` – the HTTP cache to use. Can be an instance of `CacheBackend`,
