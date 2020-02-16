@@ -57,17 +57,6 @@ The most important clause is `:process-fn`. This is the function called by the p
 
 The output should be a seq of maps that each have a new URL and a new processor (specified as a keyword) to invoke next.
 
-## Error handling
-
-When Skyscraper downloads a page, a lot of things can go wrong. Specifically, one of the following situations may occur:
-
- - There is a timeout. In this case, Skyscraper will attempt to redownload the page (up to 5 times by default before it gives up, but this is configurable, see `:retries` below).
- - The download results in a HTTP status other than 200. In this case, Skyscraper will by default look at the error code. If it is 404, it will emit a warning and continue, pruning the scrape tree as if the processor had returned an empty seq. Otherwise, the error map obtained from clj-http will be rethrown (via Slingshot).
-
-This default error handling strategy can be overridden, either globally by supplying the `:error-handler` option to `scrape`, or on a per-processor basis by putting it in `defprocessor`. If both are specified, the per-processor error handler prevails.
-
-The argument to `:error-handler` should be a function that takes an URL and a clj-http error map (containing the `:status` key), and either throws an exception or returns a seq of contexts to be used as the processor’s output. See the function `default-error-handler` in Skyscraper’s source code for an example.
-
 ## Where to go from here
 
 Explore the [documentation]. Have a look at examples in the `examples/` directory of the repo. Read the docstrings, especially those of `scrape` and `defprocessor`.
