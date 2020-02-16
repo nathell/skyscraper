@@ -347,13 +347,20 @@
   [{:skyscraper.traverse/error error,
     :skyscraper.traverse/context context}])
 
+(defn respond-with
+  "Call this function from `download-error-handler` to continue scraping as if download had succeeded."
+  [response {:keys [pipeline] :as options} context]
+  [(cond-> (advance-pipeline pipeline context)
+     true (assoc ::response response)
+     (:cookies response) (update :http/cookies merge (:cookies response)))])
+
 (defn default-download-error-handler
   "By default, when clj-http returns an error (e.g., when the server returns 4xx or 5xx),
   Skyscraper will call this function to determine what to do next.
   This handler causes Skyscraper to retry up to `retries` times for 5xx status codes,
   and to throw an exception otherwise."
   [error options context]
-  (let [{:keys [status]} (.getData error)
+  (let [{:keys [status]} (ex-data error)
         retry? (and status (>= status 500))
         retry (inc (or (::retry context) 0))]
     (if (and retry? (< retry (:retries options)))
@@ -366,17 +373,14 @@
 
 (defn- download-handler
   "Asynchronously downloads the page specified by context."
-  [context {:keys [pipeline connection-manager download-semaphore retries sleep] :as options} callback]
+  [context {:keys [connection-manager download-semaphore retries sleep] :as options} callback]
   (debugf "Running download-handler: %s" (:processor context))
   (let [req (merge {:method :get, :url (:url context)}
                    (extract-namespaced-keys "http" context))
-        success-fn (fn [resp]
+        success-fn (fn [response]
                      (debugf "[download] Downloaded %s" (:url context))
                      (.release download-semaphore)
-                     (callback
-                      [(cond-> (advance-pipeline pipeline context)
-                         true (assoc ::response resp)
-                         (:cookies resp) (update :http/cookies merge (:cookies resp)))]))
+                     (callback (respond-with response options context)))
         error-fn (fn [error]
                    (.release download-semaphore)
                    (let [error-handler (:download-error-handler options)]
