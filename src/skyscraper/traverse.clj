@@ -244,13 +244,18 @@
                         (enhancer options channels)
                         nil)))))
 
+(defn- throw-handler-error!
+  "Throws an ExceptionInfo about a handler throwing an error."
+  [error]
+  (throw (ex-info "Handler threw an error"
+                  (::context error)
+                  (::error error))))
+
 (defn wait!
   "Waits until the scraping process is complete."
   [{:keys [terminate-chan]}]
   (when-let [error (<!! terminate-chan)]
-    (throw (ex-info "Handler threw an error"
-                    (::context error)
-                    (::error error)))))
+    (throw-handler-error! error)))
 
 (defn close-all!
   "Closes channels used by the traversal process. Call this function
@@ -270,12 +275,18 @@
     (wait! channels)
     (close-all! channels)))
 
-(defn- chan->seq [ch channels]
+(defn- chan->seq [ch {:keys [terminate-chan] :as channels}]
   (lazy-seq
-   (let [[items _] (alts!! [ch (:terminate-chan channels)])]
-     (if items
-       (concat items (chan->seq ch channels))
-       (close-all! channels)))))
+   (let [[items out-ch] (alts!! [ch terminate-chan])]
+     (cond
+       (and items (= out-ch terminate-chan))
+       #_=> (do
+              (close-all! channels)
+              (throw-handler-error! items))
+       items
+       #_=> (concat items (chan->seq ch channels))
+       :otherwise
+       #_=> (close-all! channels)))))
 
 (defn leaf-seq
   "Returns a lazy seq of leaf nodes from a tree traversal. Any channels
