@@ -90,7 +90,6 @@
     `:cache-template`. Useful when mere templating does not suffice.
   - `:url-fn` – a one-argument function taking the context and returning the URL to visit.
     By default, Skyscraper just extracts the value under the `:url` key from the context.
-  - `:error-handler` – see [error-handling.md].
   - `:updatable` – a boolean (false by default). When true, the pages accessed by this
     processor are considered to change often. When Skyscraper is run in update mode (see
     below), these pages will be re-downloaded and re-processed even if they had been present

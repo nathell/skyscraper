@@ -20,6 +20,8 @@ Now imagine that you have to parse a lot of HTML documents. They all come from t
 
 In particular, you realize that you can’t just `wget -r` the whole thing and then parse each page in turn. Rather, you want to simulate the workflow of a user who tries to “click through” the website to obtain the information she’s interested in. Sites have tree-like structure, and you want to keep track of this structure as you traverse the site, and reflect it in your output. I call it “structural scraping”, and the tree of traversed pages and information extracted from each one – the “scrape tree”.
 
+ [Enlive]: http://cgrand.github.com/enlive
+
 ### Contexts
 
 A “context” is a map from keywords to arbitrary data. Think of it as “everything we have scraped so far”. A context has two special keys, `:url` and `:processor`, that contains the next URL to visit and the processor to handle it with (see below).
