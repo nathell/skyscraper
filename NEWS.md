@@ -3,7 +3,14 @@
 ## Unreleased
 
 - Skyscraper has been rewritten from scratch to be asynchronous and multithreaded,
-  based on [core.async].  See [doc/multithread.md] for details.
+  based on [core.async].  See [Scraping modes] for details.
+- Skyscraper now supports saving the scrape results to [a SQLite database][db].
+- In addition to the classic `scrape` function that returns a lazy sequence of nodes, there is an
+  alternative, non-lazy, imperative interface (`scrape!`) that treats producing new results as
+  side-effects.
+- [reaver] (using JSoup) is now available as an optional underlying engine, as an alternative to Enlive.
+- `:parse-fn` and `:http-options` can now be provided either per-page or globally. (Thanks to Alexander Solovyov for the suggestion.)
+- All options are now optional, including sane default for `process-fn`.
 - Backwards-incompatible API changes:
   - The `skyscraper` namespace has been renamed to `skyscraper.core`.
   - Processors are now named by keywords.
@@ -20,17 +27,13 @@
   - The cache interface has been overhauled. Caching now works by storing binary blobs
     (rather than strings), along with metadata (e.g., HTTP headers). Caches created
     by Skyscraper 0.1 or 0.2 cannot be reused for 0.3.
-- Skyscraper now supports saving the scrape results to a SQLite database.
-- In addition to the classic `scrape` function that returns a lazy sequence of nodes, there is an
-  alternative, non-lazy, imperative interface (`scrape!`) that treats producing new results as
-  side-effects.
-- [reaver] (using JSoup) is now available as an optional underlying engine, as an alternative to Enlive.
-- All options can now be provided either per-page or globally. (Thanks to Alexander Solovyov for the suggestion.)
-- All options are now optional, including sane default for `process-fn`.
-- `get-cache-keys` has been removed. If you want the same effect, include `:cache-key` in the desired contexts.
+  - [Error handling] has been reworked.
+  - `get-cache-keys` has been removed. If you want the same effect, include `:cache-key` in the desired contexts.
 
  [core.async]: https://github.com/clojure/core.async
- [doc/multithread.md]: doc/multithread.md
+ [Scraping modes]: doc/01-scraping-modes.md
+ [db]: doc/07-db.md
+ [Error handling]: doc/06-error-handling.md
  [reaver]: https://github.com/mischov/reaver
 
 ## 0.2.3 (2016-11-17)
