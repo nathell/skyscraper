@@ -1,6 +1,6 @@
 # History of Skyscraper releases
 
-## Unreleased
+## 0.3.0 (2020-02-17)
 
 - Skyscraper has been rewritten from scratch to be asynchronous and multithreaded,
   based on [core.async].  See [Scraping modes] for details.
@@ -8,7 +8,7 @@
 - In addition to the classic `scrape` function that returns a lazy sequence of nodes, there is an
   alternative, non-lazy, imperative interface (`scrape!`) that treats producing new results as
   side-effects.
-- [reaver] (using JSoup) is now available as an optional underlying engine, as an alternative to Enlive.
+- [reaver] (using JSoup) is now available as an optional underlying HTML parsing engine, as an alternative to Enlive.
 - `:parse-fn` and `:http-options` can now be provided either per-page or globally. (Thanks to Alexander Solovyov for the suggestion.)
 - All options are now optional, including sane default for `process-fn`.
 - Backwards-incompatible API changes:

@@ -1,7 +1,3 @@
-# NOTE NOTE NOTE
-
-This repo is a pre-release state. Things mostly work, but documentation is in the process of being updated.
-
 # Skyscraper
 
 A framework that helps you build structured dumps of whole websites.
