@@ -368,7 +368,7 @@
         [(assoc context ::retry retry)])
       (do
         (warnf "[download] Unexpected error %s, giving up, context %s" error (context/describe context))
-        (signal-error context)))))
+        (signal-error error context)))))
 
 (defn- download-handler
   "Asynchronously downloads the page specified by context."
