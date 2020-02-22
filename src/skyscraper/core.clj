@@ -65,10 +65,20 @@
 ;;; Defining processors
 
 (defonce
-  ^{:private true
-    :doc "The global registry of processors: an atom containing a map from
+  ^{:doc "The global registry of processors: an atom containing a map from
           keywords naming processors to the processor definitions."}
   processors (atom {}))
+
+(defmacro with-processor-definitions
+  "Runs body with processors defined as defs, restoring previous definitions
+  afterwards.
+  Note: don't use this unless you're skyscraper.dev."
+  [defs & body]
+  `(let [previous# @processors]
+     (try
+       (reset! processors ~defs)
+       ~@body
+       (finally (reset! processors previous#)))))
 
 (defn- default-process-fn
   "The default function that becomes a processor's :process-fn

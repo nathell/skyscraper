@@ -24,14 +24,15 @@
 (defn cleanup
   "Runs a previously terminated [[scrape]] to completion."
   []
-  (when-let [{{:keys [item-chan terminate-chan]} :channels} @scrape-data]
+  (when-let [{{:keys [item-chan terminate-chan]} :channels, processors :processors} @scrape-data]
     (log/infof "Resuming suspended scrape to clean up")
-    (loop []
-      (let [alts-res (alts!! [item-chan terminate-chan])
-            [val port] alts-res]
-        (if (= port terminate-chan)
-          (reset! scrape-data nil)
-          (recur))))))
+    (core/with-processor-definitions processors
+      (loop []
+        (let [alts-res (alts!! [item-chan terminate-chan])
+              [val port] alts-res]
+          (if (= port terminate-chan)
+            (reset! scrape-data nil)
+            (recur)))))))
 
 (defn scrape
   "A variant of [[skyscraper.core/scrape!]] that will stop and open a
@@ -49,7 +50,7 @@
         (if (= port terminate-chan)
           nil
           (if-let [{:keys [::core/resource ::core/context]} (first (filter #(::core/unimplemented %) val))]
-            (do (reset! scrape-data {:resource resource, :context context, :channels channels})
+            (do (reset! scrape-data {:resource resource, :context context, :channels channels, :processors @core/processors})
                 (browse-context context)
                 (log/infof "Scraping suspended in processor %s" (:processor context))
                 nil)

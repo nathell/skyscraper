@@ -1,14 +1,14 @@
-(defproject skyscraper "0.3.0"
+(defproject skyscraper "0.3.1-SNAPSHOT"
   :description "Structural scraping for the rest of us."
   :license {:name "MIT", :url "https://github.com/nathell/skyscraper/blob/master/README.md#license"}
   :scm {:name "git", :url "https://github.com/nathell/skyscraper"}
   :codox {:metadata {:doc/format :markdown}}
   :url "https://github.com/nathell/skyscraper"
   :dependencies [[org.clojure/clojure "1.9.0"]
-                 [org.clojure/core.async "0.7.559"]
+                 [org.clojure/core.async "1.0.567"]
                  [org.clojure/core.incubator "0.1.4"]
-                 [org.clojure/data.csv "0.1.4"]
-                 [org.clojure/data.priority-map "0.0.10"]
+                 [org.clojure/data.csv "1.0.0"]
+                 [org.clojure/data.priority-map "1.0.0"]
                  [org.clojure/java.jdbc "0.7.11"]
                  [clj-http "3.10.0"]
                  [crouton "0.1.2"]

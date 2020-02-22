@@ -1,5 +1,10 @@
 # History of Skyscraper releases
 
+## Unreleased
+
+- Bug fixes:
+  - Fix dev/scrape misbehaving when redefining processors while scraping is suspended.
+
 ## 0.3.0 (2020-02-17)
 
 - Skyscraper has been rewritten from scratch to be asynchronous and multithreaded,
