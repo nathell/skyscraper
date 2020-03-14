@@ -193,8 +193,8 @@
   content-type provided in `headers`. If `try-html?` is true,
   tries to look for encoding in the <meta http-equiv> tag
   in `body`."
-  ([headers ^bytes body] (parse-string headers body false))
-  ([headers ^bytes body try-html?]
+  ([headers ^bytes body _context] (parse-string headers body _context false))
+  ([headers ^bytes body _context try-html?]
    (let [stream1 (java.io.ByteArrayInputStream. body)
          body-map (http/parse-html stream1)
          additional-headers (if try-html?
@@ -206,12 +206,12 @@
 
 (defn parse-enlive
   "Parses a byte array as a Enlive resource."
-  [headers body]
+  [headers body _context]
   (string-resource (parse-string headers body true)))
 
 (defn parse-reaver
   "Parses a byte array as a JSoup/Reaver document."
-  [headers body]
+  [headers body _context]
   (reaver/parse (parse-string headers body true)))
 
 ;;; Scraping
@@ -441,7 +441,7 @@
   [context options]
   (let [parse (get-option context options :parse-fn)
         {:keys [headers body]} (::response context)
-        document (parse (into (http-headers/header-map) headers) body)
+        document (parse (into (http-headers/header-map) headers) body context)
         processor-name (:processor context)
         result (run-processor processor-name document context)]
     (cache/save-blob (:processed-cache options) (::cache-key context) (.getBytes (pr-str result)) nil)
