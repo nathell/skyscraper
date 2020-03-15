@@ -207,12 +207,12 @@
 (defn parse-enlive
   "Parses a byte array as a Enlive resource."
   [headers body _context]
-  (string-resource (parse-string headers body true)))
+  (string-resource (parse-string headers body _context true)))
 
 (defn parse-reaver
   "Parses a byte array as a JSoup/Reaver document."
   [headers body _context]
-  (reaver/parse (parse-string headers body true)))
+  (reaver/parse (parse-string headers body _context true)))
 
 ;;; Scraping
 
