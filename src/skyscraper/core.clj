@@ -370,7 +370,7 @@
 
 (defn- download-handler
   "Asynchronously downloads the page specified by context."
-  [context {:keys [connection-manager download-semaphore retries sleep] :as options} callback]
+  [context {:keys [connection-manager download-semaphore sleep] :as options} callback]
   (debugf "Running download-handler: %s" (:processor context))
   (let [req (merge {:method :get, :url (:url context)}
                    (extract-namespaced-keys "http" context))
@@ -397,7 +397,7 @@
 
 (defn- sync-download-handler
   "Synchronous version of download-handler."
-  [context {:keys [pipeline connection-manager] :as options}]
+  [context {:keys [connection-manager sleep] :as options}]
   (let [req (merge {:method :get, :url (:url context), :connection-manager connection-manager}
                    (extract-namespaced-keys "http" context)
                    (get-option context options :http-options))
@@ -405,6 +405,7 @@
                        http/request)]
     (try
       (infof "[download] Downloading %s" (:url context))
+      (wait sleep)
       (let [resp (request-fn req)]
         (debugf "[download] Downloaded %s" (:url context))
         [(cond-> context
