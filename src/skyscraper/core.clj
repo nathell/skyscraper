@@ -236,26 +236,14 @@
 (defn- make-pipeline
   "Returns a list of symbols naming functions that implement the pipeline steps."
   [{:keys [download-mode] :as options}]
-  (case download-mode
-    :async `[init-handler check-cache-handler download-handler store-cache-handler process-handler split-handler]
-    :sync  `[init-handler sync-download-handler store-cache-handler process-handler sync-split-handler]))
-
-(defn- compose-sync-handlers
-  "Like comp, but composes a number of traverse handlers (functions
-  of signature `[context options] => list-of-contexts`) that are
-  expected to be synchronous."
-  ([h] h)
-  ([h1 h2]
-   (fn [context options]
-     (h1 (first (h2 context options)) options)))
-  ([h1 h2 & hs]
-   (compose-sync-handlers h1 (apply compose-sync-handlers h2 hs))))
-
-(defn- make-squashed-handler
-  "Composes together all handlers in the pipeline."
-  [pipeline]
-  (apply compose-sync-handlers
-         (map (partial ns-resolve *ns*) (reverse pipeline))))
+  `[init-handler
+    check-cache-handler
+    ~(case download-mode
+       :async `download-handler
+       :sync `sync-download-handler)
+    store-cache-handler
+    process-handler
+    split-handler])
 
 (defn- advance-pipeline
   "Advances `context` to the next stage in `pipeline`."
@@ -408,7 +396,7 @@
                   error-fn))))
 
 (defn- sync-download-handler
-  "Synchronous version of download-handler that also checks for cache."
+  "Synchronous version of download-handler."
   [context {:keys [pipeline connection-manager] :as options}]
   (let [req (merge {:method :get, :url (:url context), :connection-manager connection-manager}
                    (extract-namespaced-keys "http" context)
@@ -417,9 +405,8 @@
                        http/request)]
     (try
       (infof "[download] Downloading %s" (:url context))
-      (let [cached (maybe-retrieve-from-http-cache context options)
-            resp (or cached (request-fn req))]
-        (debugf "[download] %s %s" (if cached "Retrieved from cache:" "Downloaded:") (:url context))
+      (let [resp (request-fn req)]
+        (debugf "[download] Downloaded %s" (:url context))
         [(cond-> context
            true (assoc ::response resp)
            (:cookies resp) (update :http/cookies merge (:cookies resp)))])
@@ -455,15 +442,6 @@
        (map #(assoc % ::stage `split-handler))
        (filter-contexts options)))
 
-(defn- sync-split-handler
-  "A sync version of [[split-handler]]."
-  [context options]
-  (->> (::new-items context)
-       (filter-contexts options)
-       (map #(if (and (:processor %) (:url %))
-               %
-               (context/dissoc-leaf-keys %)))))
-
 (defn- sync-handler [context options]
   "A handler that runs the squashed pipeline."
   (debugf "Running sync-handler: %s %s" (::stage context) (:processor context))
@@ -475,12 +453,7 @@
   "Ensures the seed is a seq and sets up internal keys."
   [{:keys [download-mode pipeline] :as options} seed]
   (let [seed (ensure-distinct-seq seed)]
-    (case download-mode
-      :async (mapv #(advance-pipeline pipeline %) seed)
-      :sync (mapv #(assoc %
-                          ::traverse/call-protocol :sync
-                          ::traverse/handler (make-squashed-handler pipeline))
-                  seed))))
+    (mapv #(advance-pipeline pipeline %) seed)))
 
 (def default-options
   "Default scraping options."
