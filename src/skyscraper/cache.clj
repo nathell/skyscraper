@@ -4,7 +4,7 @@
   (:refer-clojure :exclude [load load-string])
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io])
-  (:import [java.io InputStream OutputStream]))
+  (:import [java.io Closeable InputStream OutputStream]))
 
 ;;; Netstrings
 
@@ -67,7 +67,10 @@
               blob (read-netstring f)]
           {:meta (edn/read-string (String. meta-blob))
            :blob blob}))
-      (catch Exception _ nil))))
+      (catch Exception _ nil)))
+  Closeable
+  (close [cache]
+    nil))
 
 (defn fs
   "Creates a filesystem-based cache backend with a given root directory."
@@ -79,7 +82,9 @@
     []
   CacheBackend
   (save-blob [_ _ _ _] nil)
-  (load-blob [_ _] nil))
+  (load-blob [_ _] nil)
+  Closeable
+  (close [_] nil))
 
 (defn null
   "Creates a null cache backend."
@@ -98,7 +103,10 @@
   (save-blob [cache key blob metadata]
     (swap! storage assoc key {:blob blob, :meta metadata}))
   (load-blob [cache key]
-    (@storage key)))
+    (@storage key))
+  Closeable
+  (close [cache]
+    nil))
 
 (defn memory
   "Creates a memory cache backend."
