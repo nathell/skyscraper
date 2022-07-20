@@ -10,6 +10,8 @@ Skyscraper supports pluggable cache backends. The core library contains a protoc
 
 By default, both the HTML cache and the processed cache use the FS backend and are configured to live in `~/skyscraper-data`, respectively under `cache/html` and `cache/processed`.
 
+Since version 0.3.1, Skyscraper expects all `CacheBackend` implementations to also implement `java.io.Closeable`. This is so that caches can cleanly dispose of, say, database connections. Skyscraper calls `.close` on both caches as part of cleanup when ending the cache process.
+
 ## Cache keys
 
 Every page cached by Skyscraper is stored under a cache key (a string). It is up to the user to construct a key in a unique way for each page, based on information available in the context. Typically, the key is hierarchical, containing a logical “path” to the page separated by slashes (it may or may not correspond to the page’s URL).
