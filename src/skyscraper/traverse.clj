@@ -220,18 +220,21 @@
                    (default nil)
     :parallelism   number of worker threads to create (default 4)
     :prioritize?   take into account ::priority values (default false)
+    :on-end        a zero-argument callback, to be called when scraping
+                   ends (either normally or abnormally)
 
   To wait until traversal is complete, use `wait!`. Also, remember to
   use `close-all!` to close the channels returned by this
   function. See `traverse!` or `chan->seq` for an example of how to
   put it together."
   [seed options]
-  (let [{:keys [parallelism leaf-chan item-chan enhancer] :as options} (merge default-options options)
+  (let [{:keys [parallelism leaf-chan item-chan enhancer on-end] :as options} (merge default-options options)
         channels (merge {:control-chan (chan)
                          :data-chan (chan)
                          :terminate-chan (chan)
                          :leaf-chan leaf-chan
-                         :item-chan item-chan}
+                         :item-chan item-chan
+                         :on-end on-end}
                         (when enhancer
                           {:enhancer-input-chan (chan)
                            :enhancer-output-chan (chan)}))]
@@ -261,10 +264,12 @@
   "Closes channels used by the traversal process. Call this function
   after `wait!` returns."
   [channels]
-  (doseq [[k ch] channels :when (and ch (not= k :enhancer-terminate-chan))]
+  (doseq [[k ch] channels :when (and ch (not (#{:enhancer-terminate-chan :on-end} k)))]
     (close! ch))
   (when-let [ch (:enhancer-terminate-chan channels)]
     (<!! ch))
+  (when-let [on-end (:on-end channels)]
+    (on-end))
   nil)
 
 (defn traverse!

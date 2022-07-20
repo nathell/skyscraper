@@ -479,14 +479,20 @@
                (when-let [file (:db-file options)]
                  {:classname "org.sqlite.JDBC",
                   :subprotocol "sqlite",
-                  :subname file}))]
+                  :subname file}))
+        html-cache (sanitize-cache (:html-cache options) html-cache-dir)
+        processed-cache (sanitize-cache (:processed-cache options) processed-cache-dir)]
     (assoc options
            :pipeline (make-pipeline options)
            :db db
            :enhancer (when db sqlite/enhancer)
            :enhance? ::new-items
-           :html-cache (sanitize-cache (:html-cache options) html-cache-dir)
-           :processed-cache (sanitize-cache (:processed-cache options) processed-cache-dir)
+           :html-cache html-cache
+           :processed-cache processed-cache
+           :on-end #(try
+                      (.close html-cache)
+                      (finally
+                        (.close processed-cache)))
            :connection-manager (case (:download-mode options)
                                  :sync (http-conn/make-reusable-conn-manager (:conn-mgr-options options))
                                  :async (http-conn/make-reuseable-async-conn-manager (:conn-mgr-options options)))
