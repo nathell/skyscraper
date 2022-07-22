@@ -30,7 +30,9 @@
   (save-blob [cache key blob metadata]
     (swap! storage assoc key {:blob blob, :meta (into {} metadata)}))
   (load-blob [cache key]
-    (@storage key)))
+    (@storage key))
+  java.io.Closeable
+  (close [cache] nil))
 
 (deftest character-encoding-test
   (timbre/set-level! :info)
