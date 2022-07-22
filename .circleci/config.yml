@@ -3,7 +3,7 @@ jobs:
   build:
     working_directory: ~/skyscraper
     docker:
-      - image: circleci/clojure:lein-2.9.1
+      - image: cimg/clojure:1.11.1
     environment:
       LEIN_ROOT: nbd
       JVM_OPTS: -Xmx3200m
