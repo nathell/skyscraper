@@ -197,11 +197,12 @@
                   :subprotocol "sqlite"
                   :subname     db-file}))
         file (cond (nil? db)    nil
-                   (map? db)    (:subname db)
-                   (string? db) (:subname (#'jdbc/parse-properties-uri (java.net.URI. (#'jdbc/strip-jdbc db)))) ; yuck! accessing innards of clojure.java.jdbc
+                   (map? db)    (io/file (:subname db))
+                   (string? db) (io/file (:subname (#'jdbc/parse-properties-uri (java.net.URI. (#'jdbc/strip-jdbc db))))) ; yuck! accessing innards of clojure.java.jdbc
                    :otherwise  (throw (Exception. ":db needs to be a map or a string")))]
     {:db db
      :enhancer (when db enhancer)
      :ignore-db-keys (or ignore-db-keys
                          (when file
-                           (not (.exists (io/file file)))))}))
+                           (or (not (.exists file))
+                               (zero? (.length file)))))}))
