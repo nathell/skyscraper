@@ -475,28 +475,22 @@
   was supplied."
   [options]
   (let [options (merge default-options options)
-        db (or (:db options)
-               (when-let [file (:db-file options)]
-                 {:classname "org.sqlite.JDBC",
-                  :subprotocol "sqlite",
-                  :subname file}))
         html-cache (sanitize-cache (:html-cache options) html-cache-dir)
         processed-cache (sanitize-cache (:processed-cache options) processed-cache-dir)]
-    (assoc options
-           :pipeline (make-pipeline options)
-           :db db
-           :enhancer (when db sqlite/enhancer)
-           :enhance? ::new-items
-           :html-cache html-cache
-           :processed-cache processed-cache
-           :on-end #(try
-                      (.close html-cache)
-                      (finally
-                        (.close processed-cache)))
-           :connection-manager (case (:download-mode options)
-                                 :sync (http-conn/make-reusable-conn-manager (:conn-mgr-options options))
-                                 :async (http-conn/make-reuseable-async-conn-manager (:conn-mgr-options options)))
-           :download-semaphore (java.util.concurrent.Semaphore. (:max-connections options)))))
+    (merge options
+           (sqlite/initialize-db-options options)
+           {:pipeline (make-pipeline options)
+            :enhance? ::new-items
+            :html-cache html-cache
+            :processed-cache processed-cache
+            :on-end #(try
+                       (.close html-cache)
+                       (finally
+                         (.close processed-cache)))
+            :connection-manager (case (:download-mode options)
+                                  :sync (http-conn/make-reusable-conn-manager (:conn-mgr-options options))
+                                  :async (http-conn/make-reuseable-async-conn-manager (:conn-mgr-options options)))
+            :download-semaphore (java.util.concurrent.Semaphore. (:max-connections options))})))
 
 (defn scrape
   "Runs scraping on seed (an initial context or sequence of contexts), returning
@@ -516,6 +510,10 @@
     `doc/db.md` for a walkthrough. Only supports SQLite.
   - `:db-file` – an alternative to `:db`, a filename or path that will
     be used to construct a SQLite db-spec.
+  - `:ignore-db-keys` – if true, Skyscraper will insert (instead of upserting)
+    rows into the DB specified by `:db` or `:db-file`, as if none of the
+    processors specified `:skyscraper.db/key-columns`. Defaults to true
+    if the DB didn't exist.
   - `:download-error-handler` – a function called when clj-http returns an
     error when downloading; see `doc/error-handling.md` for details.
   - `:download-mode` – can be `:async` (default) or `:sync`. When async,

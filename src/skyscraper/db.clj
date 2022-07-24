@@ -2,6 +2,7 @@
   (:require
     [clojure.core.async :as async]
     [clojure.core.strint :refer [<<]]
+    [clojure.java.io :as io]
     [clojure.java.jdbc :as jdbc]
     [clojure.set :as set]
     [clojure.string :as string]
@@ -167,22 +168,40 @@
 
 (defn maybe-store-in-db
   "Wraps upsert-context, skipping contexts that contain ::skip."
-  [db {:keys [name ::columns ::key-columns] :as processor} contexts]
+  [db {:keys [name ::columns ::key-columns] :as processor} ignore-db-keys contexts]
   (if (and db columns)
     (let [columns (distinct (conj columns :parent))
           [skipped inserted] (separate ::skip contexts)
-          new-items (upsert-contexts db name key-columns columns inserted)]
+          new-items (upsert-contexts db name (when-not ignore-db-keys key-columns) columns inserted)]
       (into (vec skipped) new-items))
     contexts))
 
 (defn enhancer
   "An enhancer that upserts supplied batches of contexts into
   the database."
-  [{:keys [db]} {:keys [enhancer-input-chan enhancer-output-chan]}]
+  [{:keys [db ignore-db-keys]} {:keys [enhancer-input-chan enhancer-output-chan]}]
   (jdbc/with-db-transaction [db db]
     (loop []
       (when-let [item (async/<!! enhancer-input-chan)]
         (let [new-items (:skyscraper.core/new-items item)
-              updated (maybe-store-in-db db (:skyscraper.core/current-processor item) new-items)]
+              updated (maybe-store-in-db db (:skyscraper.core/current-processor item) ignore-db-keys new-items)]
           (async/>!! enhancer-output-chan (assoc item :skyscraper.core/new-items updated)))
         (recur)))))
+
+(defn initialize-db-options
+  "Sets up DB-related options: handles :db-file and :enhancer, autodetects :ignore-db-keys."
+  [{:keys [db db-file ignore-db-keys]}]
+  (let [db (or db
+               (when db-file
+                 {:classname   "org.sqlite.JDBC"
+                  :subprotocol "sqlite"
+                  :subname     db-file}))
+        file (cond (nil? db)    nil
+                   (map? db)    (:subname db)
+                   (string? db) (:subname (#'jdbc/parse-properties-uri (java.net.URI. (#'jdbc/strip-jdbc db)))) ; yuck! accessing innards of clojure.java.jdbc
+                   :otherwise  (throw (Exception. ":db needs to be a map or a string")))]
+    {:db db
+     :enhancer (when db enhancer)
+     :ignore-db-keys (or ignore-db-keys
+                         (when file
+                           (not (.exists (io/file file)))))}))
