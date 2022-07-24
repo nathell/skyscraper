@@ -8,26 +8,30 @@
 
 (defprocessor :tree-list
   :cache-template "tree-species/list/page/:page"
+  :skyscraper.db/columns [:english-name :latin-name]
+  :skyscraper.db/key-columns [:english-name]
   :process-fn (fn [doc ctx]
                 (concat
-                 (reaver/extract-from doc ".listing--trees .listing-item"
+                 (reaver/extract-from doc "#tree-listing > div"
                                       [:english-name :latin-name :url :processor]
-                                      ".listing__heading" reaver/text
-                                      ".listing__metadata" reaver/text
-                                      ".listing-item" (reaver/attr :href)
-                                      ".listing-item" (constantly :tree))
-                 (when-let [next-page-url (-> (reaver/select doc ".pagination__item--next") first (reaver/attr :href))]
+                                      "h3" reaver/text
+                                      "i" reaver/text
+                                      "a" (reaver/attr :href)
+                                      "a" (constantly :tree))
+                 (when-let [next-page-url (-> (reaver/select doc ".forestry__pagination-last:not(.disabled) a") first (reaver/attr :href))]
                    [{:url next-page-url
                      :processor :tree-list
                      :page (inc (:page ctx))}]))))
 
 (defprocessor :tree
   :cache-template "tree-species/tree/:english-name"
+  :skyscraper.db/columns [:description-html]
   :process-fn (fn [doc ctx]
-                {:description-html (when-let [description (reaver/select doc ".is-typeset--article")]
+                {:description-html (when-let [description (reaver/select doc ".forestry-body > .container > .row > .col-8")]
                                      (.html description))}))
 
 (defn run []
-  (core/scrape seed
-               :html-cache true
-               :parse-fn core/parse-reaver))
+  (core/scrape! seed
+                :html-cache true
+                :db-file "/tmp/trees.db"
+                :parse-fn core/parse-reaver))
