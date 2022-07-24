@@ -29,6 +29,13 @@
   (let [index-name (str "idx_" table-name)]
     (str "CREATE UNIQUE INDEX " index-name " ON " table-name " (" (string/join ", " key-column-names) ")")))
 
+(defn- create-index
+  "Creates a unique index for table-name on key-column-names."
+  [db table-name key-column-names]
+  (when (seq key-column-names)
+    (jdbc/execute! db
+                   (create-index-ddl table-name key-column-names))))
+
 (defn- create-table
   "Creates a table in db containing the given column-names. If key-column-names
   is non-empty, also creates a unique index on those columns."
@@ -40,9 +47,7 @@
                          ["parent" :integer]]
                         (for [col column-names :when (not= col "parent")]
                           [col :text]))))
-  (when (seq key-column-names)
-    (jdbc/execute! db
-                   (create-index-ddl table-name key-column-names))))
+  (create-index db table-name key-column-names))
 
 (defn- query-context-ids
   "Selects the rows corresponding to the upserted contexts, to retrieve
@@ -96,10 +101,15 @@
   (try
     (upsert-multi! db table-name column-names key-column-names rows)
     (catch org.sqlite.SQLiteException e
-      (if (re-find #"no such table" (.getMessage e))
-        (do
-          (create-table db table-name column-names key-column-names)
-          (upsert-multi! db table-name column-names key-column-names rows))
+      (condp #(string/includes? %2 %1) (.getMessage e)
+        "no such table"
+        #_=> (do
+               (create-table db table-name column-names key-column-names)
+               (upsert-multi! db table-name column-names key-column-names rows))
+        "ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint"
+        #_=> (do
+               (create-index db table-name key-column-names)
+               (upsert-multi! db table-name column-names key-column-names rows))
         (throw e)))))
 
 (defn- ensure-types-single

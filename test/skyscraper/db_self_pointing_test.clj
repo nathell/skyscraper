@@ -32,6 +32,20 @@
                  (for [li (select res [:li])]
                    {:item (text li)}))))
 
+(deftest db-index-generation-test
+  (timbre/set-level! :info)
+  (with-server handler
+    (with-temporary-sqlite-db conn
+      (let [index-query #(jdbc/query conn "select * from sqlite_master where type = 'index'")]
+        (scrape! (make-seed ::items)
+                 :db (:connection-uri conn))
+        (is (empty? (index-query))
+            "The first run shouldn't have created any indices")
+        (scrape! (make-seed ::items)
+                 :db (:connection-uri conn))
+        (is (not (empty? (index-query)))
+            "The second scrape should have created an index")))))
+
 (deftest db-self-pointing-test
   (timbre/set-level! :info)
   (dotimes [_ 50]
