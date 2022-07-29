@@ -397,7 +397,7 @@
 
 (defn- sync-download-handler
   "Synchronous version of download-handler."
-  [context {:keys [connection-manager sleep] :as options}]
+  [context {:keys [connection-manager sleep pipeline] :as options}]
   (let [req (merge {:method :get, :url (:url context), :connection-manager connection-manager}
                    (extract-namespaced-keys "http" context)
                    (get-option context options :http-options))
@@ -408,7 +408,7 @@
       (wait sleep)
       (let [resp (request-fn req)]
         (debugf "[download] Downloaded %s" (:url context))
-        [(cond-> context
+        [(cond-> (advance-pipeline pipeline context)
            true (assoc ::response resp)
            (:cookies resp) (update :http/cookies merge (:cookies resp)))])
       (catch Exception error
@@ -443,12 +443,16 @@
        (map #(assoc % ::stage `split-handler))
        (filter-contexts options)))
 
-(defn- sync-handler [context options]
+(defn- sync-handler
   "A handler that runs the squashed pipeline."
-  (debugf "Running sync-handler: %s %s" (::stage context) (:processor context))
-  (let [f (ns-resolve *ns* (::stage context))
-        results (f context options)]
-    (map (partial advance-pipeline (:pipeline options)) results)))
+  [{:keys [::stage processor] :as context} options]
+  (debugf "Running sync-handler: %s %s" stage processor)
+  (let [f (ns-resolve *ns* stage)
+        results (f context options)
+        maybe-advance-pipeline (if (= stage `sync-download-handler)
+                                 (fn [pipeline context] context)
+                                 advance-pipeline)]
+    (map (partial maybe-advance-pipeline (:pipeline options)) results)))
 
 (defn initialize-seed
   "Ensures the seed is a seq and sets up internal keys."
