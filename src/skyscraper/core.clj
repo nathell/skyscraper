@@ -358,7 +358,8 @@
   and to throw an exception otherwise."
   [error options context]
   (let [{:keys [status]} (ex-data error)
-        retry? (and status (>= status 500))
+        retry? (or (and status (>= status 500))
+                   (re-find #"timed out" (str (.getMessage error))))
         retry (inc (or (::retry context) 0))]
     (if (and retry? (<= retry (:retries options)))
       (do
