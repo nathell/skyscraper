@@ -25,6 +25,19 @@
       (let [number (Long/parseLong (subs uri 1))]
         (resp-page [:h1 number])))))
 
+(defn make-flashing-handler []
+  (let [works? (atom true)]
+    (fn handler [{:keys [uri]}]
+      (if (swap! works? not)
+        (resp-page
+         (let [number (if (= uri "/")
+                        1
+                        (Long/parseLong (subs uri 1)))]
+           (if (= number 5)
+             [:p "Leaf"]
+             [:a {:href (str "/" (inc number))} "Next"])))
+        {:status 500, :body "Try again!"}))))
+
 (defn ignoring-error-handler
   [error options context]
   [])
@@ -39,6 +52,14 @@
   :cache-template "number/:index"
   :process-fn (fn [res ctx]
                 {:number (Long/parseLong (text (first (select res [:h1]))))}))
+
+(defprocessor ::flash
+  :process-fn (fn [res ctx]
+                (concat
+                 (for [link (select res [:a])]
+                   {:url (href link), :processor ::flash})
+                 (for [p (select res [:p])]
+                   {:text (text p)}))))
 
 (deftest test-default-download-error-handler
   (timbre/set-level! :warn)
@@ -73,6 +94,16 @@
                                               :download-mode :sync
                                               :parallelism 1))))
         (is (spy/not-called? @#'core/store-cache-handler))))))
+
+(deftest test-resetting-retries
+  (timbre/set-level! :warn)
+  (let [seed (make-seed ::flash)]
+    (with-server (make-flashing-handler)
+      (let [result (scrape seed
+                           :download-mode :sync
+                           :parallelism 1
+                           :retries 1)]
+        (is (= result [{:text "Leaf"}]))))))
 
 (deftest test-custom-download-error-handler
   (timbre/set-level! :warn)
