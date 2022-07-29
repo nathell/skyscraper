@@ -69,11 +69,11 @@
         (reset-counter!)
         (testing "using scrape!"
           (is (thrown? Exception (scrape! seed)))
-          (is (= @counter 5)))
+          (is (= @counter 6)))
         (reset-counter!)
         (testing "using scrape"
           (is (thrown? Exception (doall (scrape seed))))
-          (is (= @counter 5)))))
+          (is (= @counter 6)))))
     (testing "no retries on 4xx"
       (with-server (make-handler 404)
         (reset-counter!)

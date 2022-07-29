@@ -360,7 +360,7 @@
   (let [{:keys [status]} (ex-data error)
         retry? (and status (>= status 500))
         retry (inc (or (::retry context) 0))]
-    (if (and retry? (< retry (:retries options)))
+    (if (and retry? (<= retry (:retries options)))
       (do
         (warnf "[download] Unexpected error %s, retry %s, context %s" error retry (context/describe context))
         [(assoc context ::retry retry)])
