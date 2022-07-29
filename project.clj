@@ -17,4 +17,5 @@
                  [com.taoensso/timbre "5.2.1"]
                  [org.xerial/sqlite-jdbc "3.36.0.3"]]
   :profiles {:test {:dependencies [[hiccup "1.0.5"]
-                                   [ring "1.9.5"]]}})
+                                   [ring "1.9.5"]
+                                   [tortue/spy "2.13.0"]]}})

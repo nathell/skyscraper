@@ -3,9 +3,10 @@
     [clojure.test :as test :refer [deftest is testing]]
     [net.cgrand.enlive-html :refer [select text]]
     [skyscraper.cache :as cache]
-    [skyscraper.core :refer [defprocessor scrape scrape!]]
+    [skyscraper.core :as core :refer [defprocessor scrape scrape!]]
     [skyscraper.enlive-helpers :refer [href]]
     [skyscraper.test-utils :refer [make-seed resp-page with-server]]
+    [spy.core :as spy]
     [taoensso.timbre :as timbre]))
 
 (def counter (atom 0))
@@ -62,6 +63,16 @@
         (testing "using scrape"
           (is (thrown? Exception (doall (scrape seed))))
           (is (= @counter 1)))))))
+
+(deftest test-sync-retries
+  (timbre/set-level! :warn)
+  (with-redefs [core/store-cache-handler (spy/spy @#'core/store-cache-handler)]
+    (with-server (make-handler 500)
+      (let [seed (make-seed ::start "/5")]
+        (is (thrown? Exception (doall (scrape seed
+                                              :download-mode :sync
+                                              :parallelism 1))))
+        (is (spy/not-called? @#'core/store-cache-handler))))))
 
 (deftest test-custom-download-error-handler
   (timbre/set-level! :warn)
