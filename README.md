@@ -4,7 +4,7 @@ A framework that helps you build structured dumps of whole websites.
 
 [![clojars](https://img.shields.io/clojars/v/skyscraper.svg)](https://clojars.org/skyscraper)
 [![CircleCI](https://circleci.com/gh/nathell/skyscraper.svg?style=shield)](https://circleci.com/gh/nathell/skyscraper)
-[![cljdoc](https://cljdoc.org/badge/skyscraper/skyscraper)](https://cljdoc.org/d/skyscraper/skyscraper/0.3.0)
+[![cljdoc](https://cljdoc.org/badge/skyscraper/skyscraper)](https://cljdoc.org/d/skyscraper/skyscraper/0.3.1)
 
 ## Concepts
 
@@ -61,7 +61,7 @@ Explore the [documentation]. Have a look at examples in the `examples/` director
 
 If something is unclear, or you have suggestions or encounter a bug, please create an issue!
 
- [documentation]: https://cljdoc.org/d/skyscraper/skyscraper/0.3.0
+ [documentation]: https://cljdoc.org/d/skyscraper/skyscraper/0.3.1
 
 ## Caveats
 

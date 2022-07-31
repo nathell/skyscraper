@@ -1,6 +1,6 @@
 # History of Skyscraper releases
 
-## Unreleased
+## 0.3.1 (2022-07-31)
 
 - Backwards-incompatible API changes:
   - `parse-fn` is now expected to take three arguments, the third being
