@@ -2,8 +2,25 @@
 
 ## Unreleased
 
+- Backwards-incompatible API changes:
+  - `parse-fn` is now expected to take three arguments, the third being
+    the context. The aim of this change is to support cases where the
+    HTML is known to be malformed and needs context-aware preprocessing
+    before parsing. Built-in parse-fns have been updated to take the
+    additional argument.
+  - Cache backends are now expected to implement `java.io.Closeable`
+    in addition to `CacheBackend`. Built-in backends have been
+    updated to include no-op `close` methods.
+- Optimization: Skyscraper no longer generates indexes for columns
+  marked with `:skyscraper.db/key-columns` when creating the DB from
+  scratch. There is also a new option, `:ignore-db-keys`, to force
+  this at all times.
+- Skyscraper now retries downloads upon encountering a timeout.
 - Bug fixes:
-  - Fix dev/scrape misbehaving when redefining processors while scraping is suspended.
+  - Fixed dev/scrape misbehaving when redefining processors while scraping is suspended.
+  - Fixed scrape mishandling errors with `:download-mode` set to `:sync`.
+  - Fixed an off-by-one bug in handling `:retries`.
+  - Retry counts are now correctly reset on successful download.
 
 ## 0.3.0 (2020-02-17)
 

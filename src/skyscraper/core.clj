@@ -534,10 +534,11 @@
   - `:only` – prunes the scrape tree to only include matching contexts; this can be
     a map (specifying to only include records whose values, if present, coincide with
     the map) or a predicate (meaning to filter contexts on it).
-  - `:parse-fn` – a function that takes a map of HTTP headers and a byte array
-    containing the downloaded document, and returns a parsed representation of
-    that document. Skyscraper provides [[parse-string]], [[parse-enlive]], and
-    [[parse-reaver]] out of the box. Defaults to [[parse-enlive]].
+  - `:parse-fn` – a function that takes 3 arguments: a map of HTTP headers,
+    a byte array containing the downloaded document, and the context,
+    and returns a parsed representation of that document. Skyscraper provides
+    [[parse-string]], [[parse-enlive]], and [[parse-reaver]] out of the box.
+    Defaults to [[parse-enlive]].
   - `:processed-cache` – the processed cache to use. Same possible values as
     for `:http-cache`. Defaults to `nil`.
   - `:request-fn` – the HTTP request function to use. Defaults to [[clj-http.core/request]].
