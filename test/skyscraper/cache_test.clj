@@ -26,10 +26,25 @@
         (reset! closed? true)))))
 
 (defn handler [{:keys [uri]}]
-  (resp-page [:h1 "Hello world"]))
+  (condp = uri
+    "/" (resp-page [:h1 "Hello world"])
+    "/parent" (resp-page [:a {:href "child"} "Next"])
+    "/child" (resp-page [:h1 "Text"])))
 
 (defprocessor ::start
   :cache-template "index"
+  :process-fn (fn [res ctx]
+                (for [x (select res [:h1])]
+                  {:text (text x)})))
+
+(defprocessor ::parent
+  ;; no cache-template
+  :process-fn (fn [res ctx]
+                (for [x (select res [:a])]
+                  {:url (href x), :processor ::child})))
+
+(defprocessor ::child
+  :cache-template "child"
   :process-fn (fn [res ctx]
                 (for [x (select res [:h1])]
                   {:text (text x)})))
@@ -44,3 +59,13 @@
         (is @closed?))
       (testing "subsequent scraping should throw an exception"
         (is (thrown? Exception (doall (scrape seed :html-cache cache))))))))
+
+(defn test-fs-cache []
+  (cache/fs (str (java.nio.file.Files/createTempDirectory "html-cache" (into-array java.nio.file.attribute.FileAttribute [])))))
+
+(deftest test-processed-cache-with-missing-keys
+  (with-server handler
+    (testing "scrape works correctly"
+      (is (= (scrape (make-seed ::parent "/parent")
+                     :processed-cache (test-fs-cache))
+             [{:text "Text"}])))))

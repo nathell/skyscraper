@@ -433,7 +433,8 @@
         document (parse (into (http-headers/header-map) headers) body context)
         processor-name (:processor context)
         result (run-processor processor-name document context)]
-    (cache/save-blob (:processed-cache options) (::cache-key context) (.getBytes (pr-str result)) nil)
+    (when-let [key (::cache-key context)]
+      (cache/save-blob (:processed-cache options) key (.getBytes (pr-str result)) nil))
     [(assoc context ::new-items (map (partial merge-contexts context) result))]))
 
 (defn- split-handler

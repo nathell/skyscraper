@@ -69,7 +69,7 @@ Skyscraper is work in progress. Some things are missing. The API is still in flu
 
 ## License
 
-Copyright (C) 2015–2020 Daniel Janus, http://danieljanus.pl
+Copyright (C) 2015–2022 Daniel Janus, http://danieljanus.pl
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
