@@ -6,6 +6,7 @@
   and some of the processors don’t have `:cache-template`.
 - Fix: Skyscraper no longer throws exceptions when the server returns
   multiple Content-Type headers.
+- Fix: Processed cache no longer garbles non-ASCII strings on macOS.
 
 ## 0.3.1 (2022-07-31)
 

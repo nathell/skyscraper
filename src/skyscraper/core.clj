@@ -307,7 +307,7 @@
             (not (updatable? context)))
     (if-let [key (::cache-key context)]
       (if-let [item (cache/load-blob (:processed-cache options) key)]
-        (edn/read-string (String. (:blob item)))))))
+        (edn/read-string (String. (:blob item) "UTF-8"))))))
 
 (defn- check-cache-handler
   "If context is cached, loads the cached data and skips [[download-handler]],
@@ -436,7 +436,7 @@
         processor-name (:processor context)
         result (run-processor processor-name document context)]
     (when-let [key (::cache-key context)]
-      (cache/save-blob (:processed-cache options) key (.getBytes (pr-str result)) nil))
+      (cache/save-blob (:processed-cache options) key (.getBytes (pr-str result) "UTF-8") nil))
     [(assoc context ::new-items (map (partial merge-contexts context) result))]))
 
 (defn- split-handler
