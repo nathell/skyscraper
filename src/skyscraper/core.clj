@@ -201,7 +201,9 @@
                               (http/get-headers-from-body body-map)
                               {})
          all-headers (merge headers additional-headers)
-         content-type (get all-headers "content-type")]
+         content-type (get all-headers "content-type")
+         content-type (cond-> content-type
+                        (vector? content-type) first)]
      (String. body (Charset/forName (http/detect-charset content-type))))))
 
 (defn parse-enlive
