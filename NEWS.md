@@ -1,6 +1,6 @@
 # History of Skyscraper releases
 
-## Unreleased
+## 0.3.2 (2022-08-04)
 
 - Fix: Skyscraper no longer throws exceptions when using processed-cache
   and some of the processors don’t have `:cache-template`.
