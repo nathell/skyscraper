@@ -11,8 +11,9 @@
            org.jsoup/jsoup               {:mvn/version "1.15.3"}
            org.xerial/sqlite-jdbc        {:mvn/version "3.36.0.3"}
            reaver/reaver                 {:mvn/version "0.1.3"}}
- :aliases {:test {:extra-deps {hiccup/hiccup       {:mvn/version "1.0.5"}
-                               lambdaisland/kaocha {:mvn/version "1.69.1069"}
-                               ring/ring           {:mvn/version "1.9.5"}
-                               tortue/spy          {:mvn/version "2.13.0"}}
-                  :main-opts ["-m" "kaocha.runner"]}}}
+ :aliases {:test {:extra-deps {com.github.nathell/cartestian {:git/sha "c6cb24aa8ae9e08a6f6cfccee0a606bfba965fa0"}
+                               hiccup/hiccup                 {:mvn/version "1.0.5"}
+                               lambdaisland/kaocha           {:mvn/version "1.69.1069"}
+                               ring/ring                     {:mvn/version "1.9.5"}
+                               tortue/spy                    {:mvn/version "2.13.0"}}
+                  :main-opts  ["-m" "kaocha.runner"]}}}

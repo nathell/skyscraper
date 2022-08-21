@@ -1,5 +1,7 @@
 (ns skyscraper.cache-test
-  (:require [clojure.java.io :as io]
+  (:require [cartestian.core]
+            [cartestian.test :refer [with-combinations]]
+            [clojure.java.io :as io]
             [clojure.test :refer :all]
             [net.cgrand.enlive-html :refer [select text]]
             [skyscraper.cache :as cache]
@@ -49,16 +51,28 @@
                 (for [x (select res [:h1])]
                   {:text (text x)})))
 
+(defprocessor ::kaboom
+  :cache-template "kaboom"
+  :process-fn (fn [res ctx]
+                (throw (Exception.))))
+
 (deftest test-closing-cache
-  (let [closed? (atom false)
-        cache (close-aware-cache closed?)
-        seed (make-seed ::start)]
-    (with-server handler
-      (testing "scraping should close the cache"
-        (is (= (scrape seed :html-cache cache) [{:text "Hello world"}]))
-        (is @closed?))
-      (testing "subsequent scraping should throw an exception"
-        (is (thrown? Exception (doall (scrape seed :html-cache cache))))))))
+  (with-combinations [v {:interface [:lazy :imperative]
+                         :succeeding [true false]}]
+    (let [closed? (atom false)
+          cache (close-aware-cache closed?)
+          seed (make-seed (if (:succeeding v) ::start ::kaboom))
+          run! (case (:interface v)
+                 :lazy #(dorun (scrape seed :html-cache cache))
+                 :imperative #(scrape! seed :html-cache cache))]
+      (with-server handler
+        (testing "scraping should close the cache"
+          (if (:succeeding v)
+            (is (nil? (run!)))
+            (is (thrown? Exception (run!))))
+          (is @closed?))
+        (testing "subsequent scraping should throw an exception"
+          (is (thrown? Exception (run!))))))))
 
 (defn test-fs-cache []
   (cache/fs (str (java.nio.file.Files/createTempDirectory "html-cache" (into-array java.nio.file.attribute.FileAttribute [])))))
