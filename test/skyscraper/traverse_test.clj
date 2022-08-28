@@ -43,7 +43,8 @@
 (timbre/set-level! :info)
 
 (deftest test-process
-  (traverse/traverse! [{:number 0, ::traverse/handler xform-sync, ::traverse/call-protocol :sync}] {}))
+  (traverse/traverse! [{:number 0, ::traverse/handler xform-sync, ::traverse/call-protocol :sync}] {})
+  (is true))
 
 (defn enhancer
   [_ {:keys [enhancer-input-chan enhancer-output-chan]}]
@@ -56,7 +57,8 @@
   (traverse/traverse!
    [{:number 0, ::traverse/handler xform-sync, ::traverse/call-protocol :sync}]
    {:enhancer enhancer
-    :enhance? (constantly true)}))
+    :enhance? (constantly true)})
+  (is true))
 
 (deftest test-process-as-seq
   (doseq [p [1 4 16 128]]
