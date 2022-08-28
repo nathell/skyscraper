@@ -1,0 +1,18 @@
+{:paths   ["src"]
+ :deps    {clj-http/clj-http             {:mvn/version "3.12.3"}
+           com.taoensso/timbre           {:mvn/version "5.2.1"}
+           crouton/crouton               {:mvn/version "0.1.2"}
+           enlive/enlive                 {:mvn/version "1.1.6"}
+           org.clojure/core.async        {:mvn/version "1.5.648"}
+           org.clojure/core.incubator    {:mvn/version "0.1.4"}
+           org.clojure/data.csv          {:mvn/version "1.0.1"}
+           org.clojure/data.priority-map {:mvn/version "1.1.0"}
+           org.clojure/java.jdbc         {:mvn/version "0.7.12"}
+           org.jsoup/jsoup               {:mvn/version "1.15.3"}
+           org.xerial/sqlite-jdbc        {:mvn/version "3.36.0.3"}
+           reaver/reaver                 {:mvn/version "0.1.3"}}
+ :aliases {:test {:extra-deps {hiccup/hiccup       {:mvn/version "1.0.5"}
+                               lambdaisland/kaocha {:mvn/version "1.69.1069"}
+                               ring/ring           {:mvn/version "1.9.5"}
+                               tortue/spy          {:mvn/version "2.13.0"}}
+                  :main-opts ["-m" "kaocha.runner"]}}}
