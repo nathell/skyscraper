@@ -1,0 +1,2 @@
+#!/bin/sh
+clojure -M:test:run-test "$@"

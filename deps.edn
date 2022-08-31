@@ -15,5 +15,5 @@
                                hiccup/hiccup                 {:mvn/version "1.0.5"}
                                lambdaisland/kaocha           {:mvn/version "1.69.1069"}
                                ring/ring                     {:mvn/version "1.9.5"}
-                               tortue/spy                    {:mvn/version "2.13.0"}}
-                  :main-opts  ["-m" "kaocha.runner"]}}}
+                               tortue/spy                    {:mvn/version "2.13.0"}}}
+           :run-test {:main-opts ["-m" "kaocha.runner"]}}}
