@@ -223,8 +223,8 @@
     :on-end        a zero-argument callback, to be called when scraping
                    ends (either normally or abnormally)
 
-  To wait until traversal is complete, use `wait!`. Also, remember to
-  use `close-all!` to close the channels returned by this
+  To wait until traversal is complete, use `wait!`. Otherwise, remember
+  to use `close-all!` to close the channels returned by this
   function. See `traverse!` or `chan->seq` for an example of how to
   put it together."
   [seed options]
@@ -254,15 +254,8 @@
                   (::context error)
                   (::error error))))
 
-(defn wait!
-  "Waits until the scraping process is complete."
-  [{:keys [terminate-chan]}]
-  (when-let [error (<!! terminate-chan)]
-    (throw-handler-error! error)))
-
 (defn close-all!
-  "Closes channels used by the traversal process. Call this function
-  after `wait!` returns."
+  "Closes channels used by the traversal process."
   [channels]
   (doseq [[k ch] channels :when (and ch (not (#{:enhancer-terminate-chan :on-end} k)))]
     (close! ch))
@@ -272,13 +265,20 @@
     (on-end))
   nil)
 
+(defn wait!
+  "Waits until the scraping process is complete."
+  [{:keys [terminate-chan] :as channels}]
+  (let [error (<!! terminate-chan)]
+    (close-all! channels)
+    (when error
+      (throw-handler-error! error))))
+
 (defn traverse!
   "Traverses a tree and returns after the process is complete.
   Parameters are the same as in `launch`."
   [seed options]
   (let [channels (launch seed options)]
-    (wait! channels)
-    (close-all! channels)))
+    (wait! channels)))
 
 (defn- chan->seq [ch {:keys [terminate-chan] :as channels}]
   (lazy-seq
