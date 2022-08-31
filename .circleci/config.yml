@@ -1,4 +1,6 @@
-version: 2
+version: 2.1
+orbs:
+  kaocha: lambdaisland/kaocha@0.0.3
 jobs:
   build:
     working_directory: ~/skyscraper
@@ -10,10 +12,10 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: skyscraper-{{ checksum "project.clj" }}
-      - run: lein deps
+          key: skyscraper-{{ checksum "deps.edn" }}
+      - kaocha/execute:
+          clojure_version: 1.11.1
       - save_cache:
           paths:
             - ~/.m2
-          key: skyscraper-{{ checksum "project.clj" }}
-      - run: lein test
+          key: skyscraper-{{ checksum "deps.edn" }}
