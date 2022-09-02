@@ -378,7 +378,7 @@
   (let [req (merge {:method :get, :url (:url context)}
                    (extract-namespaced-keys "http" context))
         success-fn (fn [response]
-                     (debugf "[download] Downloaded %s" (:url context))
+                     (debugf "[download] Downloaded %s" (context/describe-url context))
                      (.release download-semaphore)
                      (callback (respond-with response options context)))
         error-fn (fn [error]
@@ -387,7 +387,7 @@
                      (callback (error-handler error options context))))]
     (debugf "[download] Waiting")
     (.acquire download-semaphore)
-    (infof "[download] Downloading %s" (:url context))
+    (infof "[download] Downloading %s" (context/describe-url context))
     (let [req (merge {:async? true,
                       :connection-manager connection-manager}
                      req (get-option context options :http-options))
@@ -407,10 +407,10 @@
         request-fn (or (:request-fn options)
                        http/request)]
     (try
-      (infof "[download] Downloading %s" (:url context))
+      (infof "[download] Downloading %s" (context/describe-url context))
       (wait sleep)
       (let [resp (request-fn req)]
-        (debugf "[download] Downloaded %s" (:url context))
+        (debugf "[download] Downloaded %s" (context/describe-url context))
         [(cond-> (advance-pipeline pipeline context)
            true (assoc ::response resp)
            (:cookies resp) (update :http/cookies merge (:cookies resp)))])
