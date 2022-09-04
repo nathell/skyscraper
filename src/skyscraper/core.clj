@@ -188,6 +188,13 @@
   [s]
   (enlive/html-resource (java.io.StringReader. s)))
 
+(defn- strip-quotes
+  [s]
+  (if (and (string/starts-with? s "\"")
+           (string/ends-with? s "\""))
+    (subs s 1 (dec (count s)))
+    s))
+
 (defn parse-string
   "Parses `body`, a byte-array, as a string encoded with
   content-type provided in `headers`. If `try-html?` is true,
@@ -204,7 +211,7 @@
          content-type (get all-headers "content-type")
          content-type (cond-> content-type
                         (vector? content-type) first)]
-     (String. body (Charset/forName (http/detect-charset content-type))))))
+     (String. body (Charset/forName (strip-quotes (http/detect-charset content-type)))))))
 
 (defn parse-enlive
   "Parses a byte array as a Enlive resource."
