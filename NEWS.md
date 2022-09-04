@@ -1,6 +1,6 @@
 # History of Skyscraper releases
 
-## 0.3.3 (unreleased)
+## 0.3.3 (2022-09-04)
 
 - Feature: To facilitate debugging, processors can now set the
   `:skyscraper/description` key on contexts. These descriptions will be
