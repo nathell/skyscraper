@@ -1,5 +1,20 @@
 # History of Skyscraper releases
 
+## 0.3.3 (unreleased)
+
+- Feature: To facilitate debugging, processors can now set the
+  `:skyscraper/description` key on contexts. These descriptions will be
+  logged when downloading, instead of the URL, and won’t be propagated
+  to child contexts.
+- Fix: Skyscraper now properly closes the cache when using `scrape!`
+  and one of the processors throws an exception.
+- Fix: Skyscraper no longer complains when the server returns a quoted
+  charset in the `Content-type` header.
+- Fix: `:skyscraper.traverse/priority` is no longer propagated to
+  child contexts.
+- Infra: Skyscraper’s dependencies are now managed with cli-tools,
+  with Kaocha being used for testing.
+
 ## 0.3.2 (2022-08-04)
 
 - Fix: Skyscraper no longer throws exceptions when using processed-cache
