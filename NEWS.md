@@ -1,5 +1,10 @@
 # History of Skyscraper releases
 
+## 0.3.4 (2022-09-05)
+
+This release corrects the issue in 0.3.3 that caused its pom.xml to
+not include dependencies, but is otherwise the same.
+
 ## 0.3.3 (2022-09-04)
 
 - Feature: To facilitate debugging, processors can now set the

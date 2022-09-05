@@ -16,4 +16,6 @@
                                lambdaisland/kaocha           {:mvn/version "1.69.1069"}
                                ring/ring                     {:mvn/version "1.9.5"}
                                tortue/spy                    {:mvn/version "2.13.0"}}}
-           :run-test {:main-opts ["-m" "kaocha.runner"]}}}
+           :run-test {:main-opts ["-m" "kaocha.runner"]}
+           :release {:extra-deps {applied-science/deps-library {:mvn/version "0.4.0"}}
+                     :main-opts  ["-m" "applied-science.deps-library"]}}}
