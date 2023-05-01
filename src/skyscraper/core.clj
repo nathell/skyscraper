@@ -292,7 +292,7 @@
   "Should we redownload the given context even if we have it cached?"
   [context]
   (let [updatable (get-in context [::current-processor :updatable])]
-    (if (fn? updatable)
+    (if (ifn? updatable)
       (updatable context)
       updatable)))
 
