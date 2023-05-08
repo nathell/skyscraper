@@ -296,22 +296,24 @@
       (updatable context)
       updatable)))
 
+(defn- skip-download?
+  [context options]
+  (or (not (:update options))
+      (not (updatable? context))))
+
 ;; TODO: deduplicate code around here
 (defn- maybe-retrieve-from-http-cache
   "When a context's cache-key exists in the cache, fetches the associated
   data."
   [context options]
-  (when (or (not (:update options))
-            (not (updatable? context)))
-    (if-let [key (::cache-key context)]
-      (if-let [item (cache/load-blob (:html-cache options) key)]
-        {:body (:blob item), :headers (:meta item)}))))
+  (if-let [key (::cache-key context)]
+    (if-let [item (cache/load-blob (:html-cache options) key)]
+      {:body (:blob item), :headers (:meta item)})))
 
 (defn- maybe-retrieve-from-processed-cache
   "Likewise, for processed cache."
   [context options]
-  (when (or (not (:update options))
-            (not (updatable? context)))
+  (when (skip-download? context options)
     (if-let [key (::cache-key context)]
       (if-let [item (cache/load-blob (:processed-cache options) key)]
         (edn/read-string (String. (:blob item) "UTF-8"))))))
@@ -323,16 +325,21 @@
   (let [processed-result (maybe-retrieve-from-processed-cache context options)
         cached-response (maybe-retrieve-from-http-cache context options)]
     (cond
-      (and (:uncached-only options) (or processed-result cached-response))
+      (and (:uncached-only options)
+           (or processed-result
+               (and cached-response (skip-download? context options))))
       #_=> []
       processed-result
       #_=> [(assoc context
                    ::new-items (map (partial merge-contexts context) processed-result)
                    ::next-stage `split-handler)]
-      cached-response
+      (and cached-response (skip-download? context options))
       #_=> [(assoc context
                    ::response cached-response
                    ::next-stage `process-handler)]
+      cached-response
+      #_=> [(assoc context
+                   ::prev-response cached-response)]
       :otherwise
       #_=> [context])))
 
@@ -433,13 +440,23 @@
     (cache/save-blob (:html-cache options) key (get-in context [::response :body]) (get-in context [::response :headers])))
   [context])
 
+(defn- parsed-document
+  [context options response-key]
+  (let [parse (get-option context options :parse-fn)
+        {:keys [headers body]} (response-key context)]
+    (when body
+      (parse (into (http-headers/header-map) headers) body context))))
+
+(defn cached-document
+  "Returns a previously-cached, parsed version of the document currently being processed."
+  [context]
+  (parsed-document context (::options context) ::prev-response))
+
 (defn- process-handler
   "Runs the processor specified by context on itself. Returns a single context
   with the processor results as `::new-items`."
   [context options]
-  (let [parse (get-option context options :parse-fn)
-        {:keys [headers body]} (::response context)
-        document (parse (into (http-headers/header-map) headers) body context)
+  (let [document (parsed-document context options ::response)
         processor-name (:processor context)
         result (run-processor processor-name document context)]
     (when-let [key (::cache-key context)]

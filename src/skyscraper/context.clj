@@ -3,7 +3,7 @@
 (defn dissoc-internal
   "Dissocs the context keys that shouldn't be carried over to further processing."
   [context]
-  (let [removed-keys #{:processor :url :skyscraper.core/new-items :skyscraper.core/retry
+  (let [removed-keys #{:processor :url :skyscraper.core/new-items :skyscraper.core/retry :skyscraper.core/prev-response
                        :skyscraper/description :skyscraper.traverse/priority}]
     (into {}
           (remove (fn [[k _]] (or (contains? removed-keys k)
