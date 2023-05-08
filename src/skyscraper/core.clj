@@ -469,7 +469,10 @@
   "Ensures the seed is a seq and sets up internal keys."
   [{:keys [download-mode pipeline] :as options} seed]
   (let [seed (ensure-distinct-seq seed)]
-    (mapv #(advance-pipeline pipeline %) seed)))
+    (mapv #(->> %
+                (merge {::options options})
+                (advance-pipeline pipeline))
+          seed)))
 
 (def default-options
   "Default scraping options."

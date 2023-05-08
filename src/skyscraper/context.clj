@@ -21,6 +21,7 @@
           :skyscraper.core/cache-key
           :skyscraper.core/current-processor
           :skyscraper.core/next-stage
+          :skyscraper.core/options
           :skyscraper.core/response
           :skyscraper.core/stage
           :skyscraper.traverse/handler
