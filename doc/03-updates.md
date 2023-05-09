@@ -23,6 +23,8 @@ The value for `:updatable` can be either `true` (meaning “always update”), `
 
 Just setting `:updatable` has no effect on its own. However, when you invoke [one of the scraping entry-points][2] with `:update` set to `true`, Skyscraper will force re-downloading and re-processing of an updatable page.
 
+Sometimes, you will want to consult two versions of the document being processed: the one that was already present in cache and the freshly-downloaded one. The former is passed to the `:process-fn` as normal; to get the latter, you can call `cached-document` on the context. Note that your processor must be prepared for `cached-document` returning nil, indicating a first-time scrape. See `skyscraper.updates-test` for a contrived example.
+
 ## The optimization: `:uncached-only`
 
 Regardless of whether `:update` is enabled or not, Skyscraper normally processes the whole site (some of it potentially coming from the cache). Sometimes, you want to prune the
