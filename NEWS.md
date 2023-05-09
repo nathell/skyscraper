@@ -1,5 +1,13 @@
 # History of Skyscraper releases
 
+## 0.3.5 (2023-05-09)
+
+- Feature: New function `cached-document` for accessing a previous (cached)
+  version of a page downloaded while in update mode.
+- Documentation: New example illustrating the use of a Redis cache backend.
+  (Thanks to Patrick van de Glind, Carlo Sciolla, Alvin Francis Dumalus, and
+  Oskar Gewalli for contributing!)
+
 ## 0.3.4 (2022-09-05)
 
 This release corrects the issue in 0.3.3 that caused its pom.xml to
