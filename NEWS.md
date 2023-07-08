@@ -1,5 +1,10 @@
 # History of Skyscraper releases
 
+## Unreleased
+
+- Fix: Uncaught exceptions thrown by enhancers (like the DB one) should now be
+  propagated to the toplevel and handled gracefully.
+
 ## 0.3.5 (2023-05-09)
 
 - Feature: New function `cached-document` for accessing a previous (cached)

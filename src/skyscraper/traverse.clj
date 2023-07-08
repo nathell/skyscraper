@@ -38,7 +38,7 @@
     [clojure.data.priority-map :refer [priority-map]]
     [clojure.java.io :as io]
     [skyscraper.data :refer [separate]]
-    [taoensso.timbre :refer [debugf infof warnf errorf]]))
+    [taoensso.timbre :as timbre :refer [debugf infof warnf errorf]]))
 
 (defn- priority [ctx]
   (::priority ctx 0))
@@ -158,29 +158,37 @@
   {:done context, :new-items results})
 
 (defn- propagate-new-contexts [{:keys [item-chan leaf-chan control-chan]} enhance i context new-contexts]
-  (let [[non-leaves leaves] (separate ::handler (map enhance new-contexts))]
+  (let [enhanced (mapv enhance new-contexts)
+        [non-leaves leaves] (separate ::handler enhanced)
+        err (first (filter ::error enhanced))]
     (debugf "[worker %d] %d leaves, %d inner nodes produced" i (count leaves) (count non-leaves))
     (when (and item-chan (seq new-contexts))
       (>!! item-chan new-contexts))
     (when (and leaf-chan (seq leaves))
       (>!! leaf-chan leaves))
-    (when-let [err (::error (first new-contexts))]
-      (errorf err "[worker %d] Handler threw an error" i))
-    (>!! control-chan (processed context (if (::error (first new-contexts))
-                                           new-contexts
+    (when err
+      (timbre/error err (format "[worker %d] Handler threw an error" i)))
+    (>!! control-chan (processed context (if err
+                                           [err]
                                            non-leaves)))))
+
+(defn- wrapped-error [context error]
+  {::context context, ::error error})
 
 (defmacro capture-errors [context & body]
   `(let [context# ~context]
      (try
        ~@body
        (catch Exception e#
-         [{::context context#, ::error e#}]))))
+         [(wrapped-error context# e#)]))))
 
 (defn enhancer-loop [{:keys [enhancer-input-chan enhancer-output-chan]} f]
   (loop []
     (when-let [item (async/<!! enhancer-input-chan)]
-      (let [new-item (f item)]
+      (let [new-item (try
+                       (f item)
+                       (catch Exception e
+                         (wrapped-error item e)))]
         (async/>!! enhancer-output-chan new-item)
         (recur))))) ; XXX: do we want to recur even if an error had occurred?
 
