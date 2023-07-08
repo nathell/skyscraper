@@ -177,6 +177,13 @@
        (catch Exception e#
          [{::context context#, ::error e#}]))))
 
+(defn enhancer-loop [{:keys [enhancer-input-chan enhancer-output-chan]} f]
+  (loop []
+    (when-let [item (async/<!! enhancer-input-chan)]
+      (let [new-item (f item)]
+        (async/>!! enhancer-output-chan new-item)
+        (recur))))) ; XXX: do we want to recur even if an error had occurred?
+
 (defn- worker [{:keys [enhance?] :as options} i {:keys [control-chan data-chan enhancer-input-chan enhancer-output-chan] :as channels}]
   (let [options (assoc options ::worker i)
         enhance (fn [x]

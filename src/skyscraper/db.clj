@@ -8,6 +8,7 @@
     [clojure.string :as string]
     [skyscraper.context :as context]
     [skyscraper.data :refer [separate]]
+    [skyscraper.traverse :as traverse]
     [taoensso.timbre :refer [debugf warnf]]))
 
 (defn- keyword->db-name
@@ -189,14 +190,14 @@
 (defn enhancer
   "An enhancer that upserts supplied batches of contexts into
   the database."
-  [{:keys [db ignore-db-keys]} {:keys [enhancer-input-chan enhancer-output-chan]}]
+  [{:keys [db ignore-db-keys]} channels]
   (jdbc/with-db-transaction [db db]
-    (loop []
-      (when-let [item (async/<!! enhancer-input-chan)]
-        (let [new-items (:skyscraper.core/new-items item)
-              updated (maybe-store-in-db db (:skyscraper.core/current-processor item) ignore-db-keys new-items)]
-          (async/>!! enhancer-output-chan (assoc item :skyscraper.core/new-items updated)))
-        (recur)))))
+    (traverse/enhancer-loop
+     channels
+     (fn [item]
+       (let [new-items (:skyscraper.core/new-items item)
+             updated (maybe-store-in-db db (:skyscraper.core/current-processor item) ignore-db-keys new-items)]
+         (assoc item :skyscraper.core/new-items updated))))))
 
 (defn initialize-db-options
   "Sets up DB-related options: handles :db-file and :enhancer, autodetects :ignore-db-keys."
