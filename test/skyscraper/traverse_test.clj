@@ -6,6 +6,18 @@
     [skyscraper.traverse :as traverse]
     [taoensso.timbre :as timbre]))
 
+;; This is normally unused, but I enable it in dev from within tests
+;; to overcome Kaocha's default behaviour of not outputting anything
+;; in case a test hangs.
+(defn enable-debug! []
+  (timbre/set-level! :debug)
+  (timbre/merge-config! {:appenders {:println {:enabled? false},
+                                     :spit (taoensso.timbre.appenders.core/spit-appender {:fname "/tmp/debug.log"})}})
+  (Thread/setDefaultUncaughtExceptionHandler
+   (reify Thread$UncaughtExceptionHandler
+     (uncaughtException [_ thread ex]
+       (timbre/error ex "Uncaught exception on" (.getName thread))))))
+
 (defn xform [next-fn {:keys [number]} options]
   (filter (comp pos? :number)
           (map #(let [n (+ (* 10 number) %)]
@@ -47,11 +59,17 @@
   (is true))
 
 (defn enhancer
-  [_ {:keys [enhancer-input-chan enhancer-output-chan]}]
-  (loop []
-    (when-let [item (async/<!! enhancer-input-chan)]
-      (async/>!! enhancer-output-chan item)
-      (recur))))
+  [_ channels]
+  (traverse/enhancer-loop channels identity))
+
+(defn failing-enhancer
+  [_ channels]
+  (traverse/enhancer-loop
+   channels
+   (fn [item]
+     (when (= (:number item) 123)
+       (throw (ex-info "This enhancer really doesn't like that number!" {})))
+     (assoc item :enhanced (+ (:number item) 42)))))
 
 (deftest test-enhance
   (traverse/traverse!
@@ -59,6 +77,13 @@
    {:enhancer enhancer
     :enhance? (constantly true)})
   (is true))
+
+(deftest test-failing-enhance
+  (is (thrown? clojure.lang.ExceptionInfo
+               (traverse/traverse!
+                [{:number 0, ::traverse/handler xform-sync, ::traverse/call-protocol :sync}]
+                {:enhancer failing-enhancer
+                 :enhance? (constantly true)}))))
 
 (deftest test-process-as-seq
   (doseq [p [1 4 16 128]]
