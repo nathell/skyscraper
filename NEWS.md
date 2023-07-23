@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Feature: New option `:use-http-headers-from-content` that can be set
+  to `false` to disable charset detection based on the HTML response body.
 - Fix: Uncaught exceptions thrown by enhancers (like the DB one) should now be
   propagated to the toplevel and handled gracefully.
 

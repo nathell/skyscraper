@@ -202,8 +202,10 @@
   in `body`."
   ([headers ^bytes body _context] (parse-string headers body _context false))
   ([headers ^bytes body _context try-html?]
-   (let [stream1 (java.io.ByteArrayInputStream. body)
-         body-map (http/parse-html stream1)
+   (let [stream1 (when try-html?
+                   (java.io.ByteArrayInputStream. body))
+         body-map (when try-html?
+                    (http/parse-html stream1))
          additional-headers (if try-html?
                               (http/get-headers-from-body body-map)
                               {})
@@ -215,13 +217,13 @@
 
 (defn parse-enlive
   "Parses a byte array as a Enlive resource."
-  [headers body _context]
-  (string-resource (parse-string headers body _context true)))
+  [headers body context]
+  (string-resource (parse-string headers body context (:use-http-headers-from-content (::options context) true))))
 
 (defn parse-reaver
   "Parses a byte array as a JSoup/Reaver document."
-  [headers body _context]
-  (reaver/parse (parse-string headers body _context true)))
+  [headers body context]
+  (reaver/parse (parse-string headers body context (:use-http-headers-from-content (::options context) true))))
 
 ;;; Scraping
 
@@ -581,6 +583,10 @@
     best to set `:parallelism` to 1 together with this.
   - `:uncached-only` – prune the scrape tree, yielding only the nodes that haven't been
     scraped yet. See `doc/updates.md`.
+  - `:use-http-headers-from-content` – if true (the default for [[parse-enlive]] and
+    [[parse-reaver]]), obeys the charset declaration from `<meta http-equiv=...>` or
+    `<meta charset=...>` tags. Slows down scraping because it invokes an extra HTML
+    parse (with Crouton, as per clj-http) just to detect the charset.
   - `:update` – run in update mode (see `doc/updates.md`)."
   [seed & {:as options}]
   (let [options (initialize-options options)
