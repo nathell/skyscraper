@@ -32,9 +32,7 @@
     the context tree nodes will be visited. These are specified by the
     `::priority` context key: the less the number, the higher the priority."
   (:require
-    [clojure.core.async :as async
-     :refer [<! <!! >! >!! alts! alts!!
-             chan close! go go-loop put! thread]]
+    [clojure.core.async :as async :refer [<!! >!! alts!! chan close! thread]]
     [clojure.data.priority-map :refer [priority-map]]
     [clojure.java.io :as io]
     [skyscraper.data :refer [separate]]
@@ -100,59 +98,60 @@
        :doing #{}})))
 
 (defn- governor [{:keys [prioritize? parallelism resume-file]} seed {:keys [control-chan data-chan terminate-chan]}]
-  (go-loop [state (or (read-resume-file resume-file)
-                      (initial-state prioritize? seed))
-            want 0
-            terminating nil]
-    (when resume-file
-      (atomic-spit resume-file state))
-    (debugf "[governor] Waiting for message")
-    (let [message (<! control-chan)]
-      (debugf "[governor] Got %s" (if (= message :gimme) "gimme" "message"))
-      (cond
-        terminating (when (pos? terminating)
-                      (>! data-chan {::terminate true})
-                      (if (= terminating 1)
-                        (do
-                          (when resume-file
-                            (.delete (io/file resume-file)))
-                          (close! terminate-chan))
-                        (recur state want (dec terminating))))
-        (= message :gimme) (let [[res state] (gimme state)]
-                             (debugf "[governor] Giving")
-                             (if res
-                               (do
-                                 (>! data-chan res)
-                                 (recur state want nil))
-                               (recur state (inc want) nil)))
-        :otherwise (let [{:keys [unexpected want giveaway terminate state error]}
-                         (done state message want)]
-                     (cond
-                       unexpected (do
-                                    (errorf "[governor] Unexpected message: %s" message)
-                                    (recur state want nil))
-                       terminate (do
-                                   (debugf "[governor] Entering termination mode")
-                                   (dotimes [i want]
-                                     (>! data-chan {::terminate true}))
-                                   (recur state want (- parallelism want)))
-                       error (do
-                               (debugf "[governor] Error encountered, entering abnormal termination")
-                               (loop [cnt (- parallelism want)]
-                                 (when (pos? cnt)
-                                   (let [msg (<! control-chan)]
-                                     (recur (if (= msg :gimme)
-                                              (dec cnt)
-                                              cnt)))))
-                               (dotimes [i parallelism]
-                                 (>! data-chan {::terminate true}))
-                               (>! terminate-chan error)
-                               (close! terminate-chan))
-                       :else (do
-                               (debugf "[governor] Giving away: %d" (count giveaway))
-                               (doseq [item giveaway]
-                                 (>! data-chan item))
-                               (recur state want nil))))))))
+  (thread
+    (loop [state (or (read-resume-file resume-file)
+                     (initial-state prioritize? seed))
+           want 0
+           terminating nil]
+      (when resume-file
+        (atomic-spit resume-file state))
+      (debugf "[governor] Waiting for message")
+      (let [message (<!! control-chan)]
+        (debugf "[governor] Got %s" (if (= message :gimme) "gimme" "message"))
+        (cond
+          terminating (when (pos? terminating)
+                        (>!! data-chan {::terminate true})
+                        (if (= terminating 1)
+                          (do
+                            (when resume-file
+                              (.delete (io/file resume-file)))
+                            (close! terminate-chan))
+                          (recur state want (dec terminating))))
+          (= message :gimme) (let [[res state] (gimme state)]
+                               (debugf "[governor] Giving")
+                               (if res
+                                 (do
+                                   (>!! data-chan res)
+                                   (recur state want nil))
+                                 (recur state (inc want) nil)))
+          :otherwise (let [{:keys [unexpected want giveaway terminate state error]}
+                           (done state message want)]
+                       (cond
+                         unexpected (do
+                                      (errorf "[governor] Unexpected message: %s" message)
+                                      (recur state want nil))
+                         terminate (do
+                                     (debugf "[governor] Entering termination mode")
+                                     (dotimes [i want]
+                                       (>!! data-chan {::terminate true}))
+                                     (recur state want (- parallelism want)))
+                         error (do
+                                 (debugf "[governor] Error encountered, entering abnormal termination")
+                                 (loop [cnt (- parallelism want)]
+                                   (when (pos? cnt)
+                                     (let [msg (<!! control-chan)]
+                                       (recur (if (= msg :gimme)
+                                                (dec cnt)
+                                                cnt)))))
+                                 (dotimes [i parallelism]
+                                   (>!! data-chan {::terminate true}))
+                                 (>!! terminate-chan error)
+                                 (close! terminate-chan))
+                         :else (do
+                                 (debugf "[governor] Giving away: %d" (count giveaway))
+                                 (doseq [item giveaway]
+                                   (>!! data-chan item))
+                                 (recur state want nil)))))))))
 
 (defn- processed [context results]
   {:done context, :new-items results})
