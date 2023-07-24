@@ -30,7 +30,7 @@
   (xform (constantly {::traverse/handler xform-sync, ::traverse/call-protocol :sync}) context options))
 
 (defn xform-async [context options on-done]
-  (Thread/sleep (rand-int 1000))
+  (Thread/sleep (long (rand-int 1000)))
   (on-done (xform (constantly {::traverse/handler `xform-async, ::traverse/call-protocol :callback}) context options)))
 
 (defn xform-erroring [{:keys [number] :as context} options]
@@ -46,7 +46,7 @@
          context options))
 
 (defn xform-async-random [context options on-done]
-  (Thread/sleep (rand-int 1000))
+  (Thread/sleep (long (rand-int 1000)))
   (on-done
    (xform #(rand-nth [{::traverse/handler xform-sync-random, ::traverse/call-protocol :sync}
                       {::traverse/handler xform-async-random, ::traverse/call-protocol :callback}])
